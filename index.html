@@ -156,8 +156,20 @@
 <div id="toast"></div>
 
 <script>
-const SB_URL='https://dgnxbcoxdpdloplkcmzs.supabase.co';
-const SB_KEY='sb_publishable_kXCrlX-9S1ud3bs9Zdyt1A_9n-U1X1F';
+/* Which backend this deploy talks to is decided by the hostname.
+   costgal.github.io/ledger/       -> sandbox (Kostas only)
+   anything else (beta host, local) -> beta (friends)
+   Both keys are publishable: RLS + the signup allowlist are the real gate. */
+const ENVS={
+  sandbox:{url:'https://dgnxbcoxdpdloplkcmzs.supabase.co', key:'sb_publishable_kXCrlX-9S1ud3bs9Zdyt1A_9n-U1X1F'},
+  beta:   {url:'https://slejxagvgjoqqkqayiyt.supabase.co', key:'sb_publishable_g-sMnPFYx_laWcDmrUrslg_BtVDFij7'}
+};
+const ENV_NAME = (location.hostname==='costgal.github.io' && location.pathname.indexOf('/ledger/')===0)
+  ? 'sandbox' : 'beta';
+const SB_URL=ENVS[ENV_NAME].url;
+const SB_KEY=ENVS[ENV_NAME].key;
+/* Sessions are keyed per environment so signing into one doesn't clobber the other. */
+const SESS_KEY='ledger_session_'+ENV_NAME;
 
 /* ---------- utils ---------- */
 const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -188,8 +200,8 @@ function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.
   clearTimeout(toast._x); toast._x=setTimeout(()=>t.style.display='none', 4000); }
 
 /* ---------- auth + api ---------- */
-function sess(){ try{ return JSON.parse(localStorage.getItem('ledger_session')||'null'); }catch(e){ return null; } }
-function setSess(s){ if(s) localStorage.setItem('ledger_session', JSON.stringify(s)); else localStorage.removeItem('ledger_session'); }
+function sess(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
+function setSess(s){ if(s) localStorage.setItem(SESS_KEY, JSON.stringify(s)); else localStorage.removeItem(SESS_KEY); }
 async function authReq(path, body){
   const r=await fetch(SB_URL+'/auth/v1/'+path,{method:'POST',
     headers:{apikey:SB_KEY,'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -586,7 +598,8 @@ function renderManageView(){
     impT, el('div',{class:'btnrow'}, el('button',{onclick:runImport},'Import')), impMsg));
 
   out.push(el('section',null,
-    el('div',{class:'head'},el('h2',null,'Account'),el('span',{class:'sub'}, (sess()&&sess().user&&sess().user.email)||'')),
+    el('div',{class:'head'},el('h2',null,'Account'),
+      el('span',{class:'sub'}, ((sess()&&sess().user&&sess().user.email)||'')+' \u00B7 '+ENV_NAME)),
     el('div',{class:'btnrow'}, el('button',{onclick:()=>{ setSess(null); boot(); }},'Sign out'))));
   return out;
 }
