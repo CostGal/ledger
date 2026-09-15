@@ -1,0 +1,666 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Ledger">
+<meta name="theme-color" content="#000000">
+<meta name="format-detection" content="telephone=no">
+<title>Ledger</title>
+<style>
+  :root{
+    --bg:#000; --card:#141413; --card2:#1D1D1B; --rule:#2C2C29;
+    --ink:#EFEFED; --ink2:#8C8C86; --acc:#D97757; --acc-soft:#2B1A14;
+    --bad:#E5484D; --bad-soft:#2B1214;
+    --fut:"Futura","Futura PT","Avenir Next",Avenir,"Century Gothic",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:manipulation}
+  html{background:var(--bg); -webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    padding:calc(env(safe-area-inset-top) + 18px)
+            calc(env(safe-area-inset-right) + 16px)
+            calc(env(safe-area-inset-bottom) + 96px)
+            calc(env(safe-area-inset-left) + 16px);
+    background:var(--bg); color:var(--ink);
+    font-family:var(--fut); font-size:16px; line-height:1.45; letter-spacing:.005em;
+    max-width:560px; margin-inline:auto;
+    -webkit-font-smoothing:antialiased; overscroll-behavior-y:none;
+  }
+  h1,h2{margin:0; font-weight:500}
+  button{font-family:inherit; -webkit-user-select:none; user-select:none; cursor:pointer; color:var(--ink)}
+  button:active{opacity:.65}
+  input,select,textarea{font-family:inherit; font-size:16px; color:var(--ink); background:var(--card2); border:1px solid var(--rule); border-radius:10px}
+  input,select{padding:11px 12px}
+  ::placeholder{color:#5E5E57}
+
+  .topbar{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px}
+  .topbar h1{font-size:22px; letter-spacing:.06em; text-transform:uppercase}
+  .nav{display:flex; gap:6px; flex:none; align-items:center}
+  .nav button{
+    font-size:19px; width:46px; height:44px; color:var(--ink2); line-height:1;
+    background:var(--card); border:1px solid var(--rule); border-radius:10px;
+  }
+  .nav button:disabled{opacity:.28}
+  .nav .today{width:auto; padding:0 14px; font-size:14px; color:var(--acc)}
+  .viewhead{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:2px 0 16px}
+  .viewhead h2{font-size:20px; letter-spacing:.01em}
+  .viewhead .sub{font-size:13px; color:var(--ink2)}
+  input[type=date]{background:var(--card); border:1px solid var(--rule); color:var(--ink2); padding:8px 10px; font-size:14px; -webkit-appearance:none; appearance:none}
+
+  .status{
+    margin:0 0 22px; padding:15px 16px; background:var(--card);
+    border:1px solid var(--rule); border-left:3px solid var(--acc);
+    border-radius:10px; font-size:15px; line-height:1.5; color:var(--ink2);
+  }
+  .status b{color:var(--ink); font-weight:500}
+  .status.alarm{border-left-color:var(--bad)}
+  .status .bad{color:var(--bad)}
+
+  section{margin-bottom:32px}
+  .head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:13px; padding-bottom:9px; border-bottom:1px solid var(--rule)}
+  .head h2{font-size:13px; letter-spacing:.16em; color:var(--ink2); text-transform:uppercase}
+  .head .sub{font-size:13px; color:var(--ink2)}
+  .headbtn{font-size:14px; color:var(--acc); background:none; border:0; padding:6px 0 6px 14px; min-height:34px}
+
+  .toggles{display:flex; flex-direction:column; gap:8px}
+  .tog{
+    display:flex; align-items:center; gap:14px; width:100%; min-height:56px;
+    padding:15px 16px; background:var(--card); text-align:left;
+    border:1px solid var(--rule); border-radius:12px; font-size:17px;
+  }
+  .tog .box{flex:none; width:24px; height:24px; border:1.5px solid #40403B; border-radius:7px; display:grid; place-items:center; font-size:14px; color:transparent}
+  .tog .sub{margin-left:auto; font-size:13px; color:var(--ink2)}
+  .tog[aria-pressed="true"]{border-color:var(--acc); background:var(--acc-soft)}
+  .tog[aria-pressed="true"] .box{background:var(--acc); border-color:var(--acc); color:#100E0D}
+
+  .chips{display:flex; flex-wrap:wrap; gap:8px}
+  .chip{display:inline-flex; align-items:stretch; overflow:hidden; min-height:52px; background:var(--card); border:1px solid var(--rule); border-radius:16px}
+  .chip .lbl{display:flex; align-items:center; gap:10px; padding:6px 16px; background:none; border:0; font-size:16px; text-align:left}
+  .chip .txt{display:flex; flex-direction:column; align-items:flex-start; gap:1px}
+  .chip .prog{font-size:11.5px; color:var(--ink2); letter-spacing:.02em}
+  .chip .n{min-width:22px; height:22px; padding:0 6px; border-radius:11px; background:#3C3C37; font-size:12.5px; line-height:22px; text-align:center}
+  .chip.met{border-color:var(--acc); background:var(--acc-soft)}
+  .chip.met .n{background:var(--acc); color:#100E0D}
+  .chip.over{border-color:var(--bad); background:var(--bad-soft)}
+  .chip.over .n{background:var(--bad); color:#fff}
+  .chip .minus{font-size:20px; color:var(--ink2); background:var(--card2); border:0; padding:0 15px; border-right:1px solid var(--rule); line-height:1}
+
+  .daystrip{display:flex; gap:6px; margin-bottom:18px}
+  .daystrip button{flex:1; min-height:44px; font-size:13px; color:var(--ink2); background:var(--card); border:1px solid var(--rule); border-radius:9px}
+  .daystrip button.on{color:var(--acc); border-color:var(--acc)}
+
+  .row{display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid var(--rule)}
+  .row:last-child{border-bottom:0}
+  .row .name{flex:1; font-size:16px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .row.tap{cursor:pointer}
+  .dots{display:flex; gap:5px; flex:none}
+  .dots i{width:7px; height:7px; border-radius:2px; background:#2E2E2B}
+  .dots i.on{background:var(--acc)}
+  .dots i.onx{background:#706C66}
+  .dots i.bad{background:var(--bad)}
+  .dots i.today{outline:1px solid #57554F; outline-offset:3px}
+  .tally{flex:none; min-width:76px; text-align:right; font-size:14px; color:var(--ink2)}
+  .tally.met{color:var(--acc)}
+  .tally.over{color:var(--bad)}
+
+  .heat{margin:4px 0 10px; padding:12px; background:var(--card); border:1px solid var(--rule); border-radius:10px}
+  .heat .grid{display:grid; grid-template-columns:repeat(7,1fr); gap:5px}
+  .heat .cell{aspect-ratio:1; border-radius:5px; background:#232321; display:grid; place-items:center; font-size:10.5px; color:#100E0D}
+  .heat .cell.h{background:var(--acc)}
+  .heat .cell.hx{background:var(--bad); color:#fff}
+  .heat .dow{aspect-ratio:auto; background:none; color:var(--ink2); font-size:10.5px}
+  .heat .cell.out{background:transparent}
+
+  .ask{font-size:17px; margin:0 0 14px; line-height:1.35}
+  .scale{display:flex; gap:8px}
+  .scale button{flex:1; min-height:52px; font-size:17px; color:var(--ink2); background:var(--card); border:1px solid var(--rule); border-radius:12px}
+  .scale button[aria-pressed="true"]{background:var(--acc); border-color:var(--acc); color:#100E0D}
+  .scalekey{display:flex; justify-content:space-between; font-size:12.5px; color:#6A6A62; margin-top:9px}
+  textarea{width:100%; margin-top:14px; min-height:84px; padding:14px; line-height:1.45; resize:vertical; -webkit-user-select:text; user-select:text}
+
+  .form{display:flex; flex-direction:column; gap:12px; padding:16px; background:var(--card); border:1px solid var(--rule); border-radius:12px; margin-bottom:16px}
+  .form label{font-size:12.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink2); display:flex; flex-direction:column; gap:6px}
+  .btnrow{display:flex; gap:8px}
+  .btnrow button{flex:1; min-height:50px; font-size:15px; background:var(--card2); border:1px solid var(--rule); border-radius:11px}
+  .btnrow button.pri{background:var(--acc); border-color:var(--acc); color:#100E0D}
+  .btnrow button.danger{color:var(--bad); border-color:#4A2325}
+  .mut{font-size:13px; color:var(--ink2); line-height:1.5}
+  .msg{font-size:13.5px; color:var(--acc); min-height:18px; margin-top:8px}
+  .msg.err{color:var(--bad)}
+
+  .tabbar{
+    position:fixed; left:0; right:0; bottom:0; z-index:10;
+    display:flex; justify-content:center; gap:6px;
+    padding:10px 16px calc(env(safe-area-inset-bottom) + 10px);
+    background:rgba(0,0,0,.92); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    border-top:1px solid var(--rule);
+  }
+  .tabbar button{
+    flex:1; max-width:120px; min-height:48px; font-size:14px; letter-spacing:.04em;
+    color:var(--ink2); background:none; border:1px solid transparent; border-radius:11px;
+  }
+  .tabbar button.on{color:var(--acc); background:var(--acc-soft); border-color:#3A241B}
+
+  .auth{max-width:360px; margin:12vh auto 0; display:flex; flex-direction:column; gap:12px}
+  .auth h1{font-size:26px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px}
+  .auth input{width:100%}
+  #toast{position:fixed; left:16px; right:16px; bottom:calc(env(safe-area-inset-bottom) + 84px); z-index:20;
+    background:var(--bad-soft); border:1px solid var(--bad); color:var(--ink); border-radius:11px;
+    padding:12px 14px; font-size:14px; display:none}
+  button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--acc); outline-offset:3px}
+</style>
+
+<div id="app"></div>
+<div id="toast"></div>
+
+<script>
+const SB_URL='https://dgnxbcoxdpdloplkcmzs.supabase.co';
+const SB_KEY='sb_publishable_kXCrlX-9S1ud3bs9Zdyt1A_9n-U1X1F';
+
+/* ---------- utils ---------- */
+const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const DL=['M','T','W','T','F','S','S'];
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONF=['January','February','March','April','May','June','July','August','September','October','November','December'];
+function el(tag, props, ...kids){
+  const n=document.createElement(tag);
+  if(props) for(const k in props){
+    if(k==='class') n.className=props[k];
+    else if(k==='html') n.innerHTML=props[k];
+    else if(k.slice(0,2)==='on') n[k]=props[k];
+    else if(k==='hidden'||k==='disabled'||k==='value'||k==='checked') n[k]=props[k];
+    else n.setAttribute(k, props[k]);
+  }
+  kids.flat().forEach(c=>{ if(c!=null) n.appendChild(typeof c==='string'?document.createTextNode(c):c); });
+  return n;
+}
+function key(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function parseKey(s){ const p=s.split('-'); return new Date(+p[0], +p[1]-1, +p[2]); }
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function mondayOf(d){ const x=new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; }
+function monthStart(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+function monthEnd(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
+function sameDay(a,b){ return key(a)===key(b); }
+function todayD(){ const t=new Date(); t.setHours(0,0,0,0); return t; }
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block';
+  clearTimeout(toast._x); toast._x=setTimeout(()=>t.style.display='none', 4000); }
+
+/* ---------- auth + api ---------- */
+function sess(){ try{ return JSON.parse(localStorage.getItem('ledger_session')||'null'); }catch(e){ return null; } }
+function setSess(s){ if(s) localStorage.setItem('ledger_session', JSON.stringify(s)); else localStorage.removeItem('ledger_session'); }
+async function authReq(path, body){
+  const r=await fetch(SB_URL+'/auth/v1/'+path,{method:'POST',
+    headers:{apikey:SB_KEY,'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.msg||d.error_description||d.message||('Auth error '+r.status));
+  return d;
+}
+let refreshing=null;
+async function refreshSession(){
+  if(refreshing) return refreshing;
+  refreshing=(async()=>{
+    const s=sess(); if(!s||!s.refresh_token) throw new Error('signed out');
+    const d=await authReq('token?grant_type=refresh_token',{refresh_token:s.refresh_token});
+    setSess(d); refreshing=null; return d;
+  })();
+  return refreshing;
+}
+async function api(path, opts, retry){
+  opts=opts||{}; if(retry===undefined) retry=true;
+  const s=sess(); if(!s) throw new Error('signed out');
+  const r=await fetch(SB_URL+'/rest/v1/'+path,{
+    method:opts.method||'GET',
+    headers:Object.assign({apikey:SB_KEY, Authorization:'Bearer '+s.access_token,
+      'Content-Type':'application/json'}, opts.headers||{}),
+    body:opts.body!==undefined?JSON.stringify(opts.body):undefined
+  });
+  if(r.status===401 && retry){ try{ await refreshSession(); }catch(e){ setSess(null); boot(); throw e; } return api(path,opts,false); }
+  if(!r.ok){ const t=await r.text(); throw new Error('DB '+r.status+': '+t.slice(0,140)); }
+  if(r.status===204) return [];
+  const txt=await r.text(); return txt?JSON.parse(txt):[];
+}
+
+/* ---------- data ---------- */
+const S={ view:'day', date:todayD(), types:[], logs:{}, loaded:new Set(), refl:{}, editingId:null, showArchived:false, firstRun:false, renderToken:0 };
+function monthKeyOf(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+async function loadTypes(){ S.types=await api('entry_types?select=*&order=sort.asc,created_at.asc'); }
+async function ensureRange(a,b){
+  const x=new Date(a.getFullYear(), a.getMonth(), 1);
+  while(x<=b){
+    const mk=monthKeyOf(x);
+    if(!S.loaded.has(mk)){
+      const rows=await api('logs?select=entry_type_id,date,count&date=gte.'+key(x)+'&date=lte.'+key(monthEnd(x)));
+      rows.forEach(r=>{ if(!S.logs[r.date]) S.logs[r.date]={}; S.logs[r.date][r.entry_type_id]=r.count; });
+      S.loaded.add(mk);
+    }
+    x.setMonth(x.getMonth()+1);
+  }
+}
+function cnt(id, dk){ return (S.logs[dk] && S.logs[dk][id]) || 0; }
+async function setLog(id, dk, count){
+  if(!S.logs[dk]) S.logs[dk]={};
+  S.logs[dk][id]=count;
+  try{
+    const upd=await api('logs?entry_type_id=eq.'+id+'&date=eq.'+dk,
+      {method:'PATCH', headers:{Prefer:'return=representation'}, body:{count:count}});
+    if(!upd.length) await api('logs',{method:'POST', headers:{Prefer:'return=minimal'},
+      body:{entry_type_id:id, date:dk, count:count}});
+  }catch(e){ toast('Not saved — '+e.message); }
+}
+function periodRange(t, d){
+  if(t.period==='day') return [d,d];
+  if(t.period==='week') return [mondayOf(d), addDays(mondayOf(d),6)];
+  return [monthStart(d), monthEnd(d)];
+}
+function sumRange(id,a,b){ let s=0; let x=new Date(a); while(x<=b){ s+=cnt(id,key(x)); x=addDays(x,1); } return s; }
+function periodTot(t,d){ const r=periodRange(t,d); return sumRange(t.id,r[0],r[1]); }
+function isCeil(t){ return t.kind==='ceiling'; }
+function periodLabel(p){ return p==='day'?'today':(p==='week'?'this wk':'this mo'); }
+async function getRefl(wk){
+  if(S.refl[wk]!==undefined) return S.refl[wk];
+  const rows=await api('reflections?select=*&week_start=eq.'+wk);
+  S.refl[wk]=rows[0]||{week_start:wk, score:0, note:''};
+  return S.refl[wk];
+}
+async function setRefl(wk, patch){
+  Object.assign(S.refl[wk], patch);
+  try{
+    const upd=await api('reflections?week_start=eq.'+wk,
+      {method:'PATCH', headers:{Prefer:'return=representation'}, body:patch});
+    if(!upd.length) await api('reflections',{method:'POST', headers:{Prefer:'return=minimal'},
+      body:Object.assign({week_start:wk}, patch)});
+  }catch(e){ toast('Not saved — '+e.message); }
+}
+
+/* ---------- seed ---------- */
+const SEED=[
+  ['exercise','Exercise','floor','week',3], ['run','Run','floor','week',1],
+  ['read','Read','binary','week',5], ['sleep','Slept 7h+','binary','week',7],
+  ['takeout','Takeout','ceiling','week',2], ['latenight','Late night','ceiling','week',2],
+];
+async function seedIfEmpty(){
+  if(S.types.length) return false;
+  await api('entry_types',{method:'POST', headers:{Prefer:'return=minimal'},
+    body:SEED.map((s,i)=>({slug:s[0], name:s[1], kind:s[2], period:s[3], target:s[4], sort:i}))});
+  await loadTypes();
+  return true;
+}
+
+/* ---------- shell ---------- */
+const app=document.getElementById('app');
+function shell(content){
+  app.innerHTML='';
+  app.appendChild(el('div',{class:'topbar'},
+    el('h1',null,'Ledger'),
+    el('div',{class:'nav'}, navButtons())
+  ));
+  content.forEach(c=>app.appendChild(c));
+  app.appendChild(el('div',{class:'tabbar'},
+    tab('day','Day'), tab('week','Week'), tab('month','Month'), tab('manage','Entries')
+  ));
+}
+function tab(v,label){
+  return el('button',{class:S.view===v?'on':'', onclick:()=>{ S.view=v; render(); }}, label);
+}
+function navButtons(){
+  const t=todayD();
+  if(S.view==='day'){
+    return [
+      !sameDay(S.date,t)?el('button',{class:'today', onclick:()=>{S.date=todayD(); render();}},'Today'):null,
+      el('button',{'aria-label':'Previous day', onclick:()=>{S.date=addDays(S.date,-1); render();}},'\u2039'),
+      el('button',{'aria-label':'Next day', disabled:key(S.date)>=key(t), onclick:()=>{S.date=addDays(S.date,1); render();}},'\u203A'),
+    ];
+  }
+  if(S.view==='week'){
+    return [
+      el('button',{'aria-label':'Previous week', onclick:()=>{S.date=addDays(mondayOf(S.date),-7); render();}},'\u2039'),
+      el('button',{'aria-label':'Next week', disabled:addDays(mondayOf(S.date),7)>t, onclick:()=>{S.date=addDays(mondayOf(S.date),7); render();}},'\u203A'),
+    ];
+  }
+  if(S.view==='month'){
+    return [
+      el('button',{'aria-label':'Previous month', onclick:()=>{S.date=new Date(S.date.getFullYear(),S.date.getMonth()-1,1); render();}},'\u2039'),
+      el('button',{'aria-label':'Next month', disabled:new Date(S.date.getFullYear(),S.date.getMonth()+1,1)>t, onclick:()=>{S.date=new Date(S.date.getFullYear(),S.date.getMonth()+1,1); render();}},'\u203A'),
+    ];
+  }
+  return [];
+}
+
+/* ---------- day view ---------- */
+function renderDayView(){
+  const d=S.date, dk=key(d), t=todayD();
+  const title=sameDay(d,t)?'Today':(DAYS[(d.getDay()+6)%7]);
+  const dateInp=el('input',{type:'date', value:dk, max:key(t),
+    onchange:e=>{ const v=e.target.value; if(v){ S.date=parseKey(v); render(); } }});
+  const head=el('div',{class:'viewhead'},
+    el('h2',null,title+', '+d.getDate()+' '+MON[d.getMonth()]), dateInp);
+
+  const act=S.types.filter(x=>x.active);
+  const bins=act.filter(x=>x.kind==='binary');
+  const floors=act.filter(x=>x.kind==='floor');
+  const ceils=act.filter(x=>x.kind==='ceiling');
+
+  const togs=el('div',{class:'toggles'}, bins.map(b=>{
+    const on=cnt(b.id,dk)>0;
+    const tot=periodTot(b,d);
+    return el('button',{class:'tog','aria-pressed':String(on), onclick:async()=>{ await setLog(b.id,dk,on?0:1); render(); }},
+      el('span',{class:'box'},'\u2713'), b.name,
+      el('span',{class:'sub'}, tot+'/'+b.target+' '+periodLabel(b.period)));
+  }));
+
+  function chip(x){
+    const n=cnt(x.id,dk), tot=periodTot(x,d), T=x.target;
+    const over=isCeil(x)&&tot>T, met=!isCeil(x)&&tot>=T;
+    const c=el('div',{class:'chip'+(over?' over':'')+(met?' met':'')});
+    if(n>0) c.appendChild(el('button',{class:'minus','aria-label':'Remove one '+x.name,
+      onclick:async e=>{ e.stopPropagation(); await setLog(x.id,dk,Math.max(0,n-1)); render(); }},'\u2013'));
+    c.appendChild(el('button',{class:'lbl', onclick:async()=>{ await setLog(x.id,dk,n+1); render(); }},
+      el('span',{class:'txt'}, el('span',null,x.name),
+        el('span',{class:'prog'}, tot+'/'+T+' '+periodLabel(x.period)+(isCeil(x)?' max':''))),
+      n>0?el('span',{class:'n'},String(n)):null));
+    return c;
+  }
+
+  return [head,
+    bins.length?el('section',null, el('div',{class:'head'},el('h2',null,'Daily'),el('span',{class:'sub'},'tap = done')), togs):null,
+    floors.length?el('section',null, el('div',{class:'head'},el('h2',null,'Counters')), el('div',{class:'chips'}, floors.map(chip))):null,
+    ceils.length?el('section',null, el('div',{class:'head'},el('h2',null,'Budgets')), el('div',{class:'chips'}, ceils.map(chip))):null,
+  ].filter(Boolean);
+}
+
+/* ---------- week view ---------- */
+function renderWeekView(refl){
+  const ws=mondayOf(S.date), we=addDays(ws,6), t=todayD();
+  const head=el('div',{class:'viewhead'},
+    el('h2',null, ws.getDate()+(ws.getMonth()===we.getMonth()?'':' '+MON[ws.getMonth()])+'\u2013'+we.getDate()+' '+MON[we.getMonth()]),
+    el('span',{class:'sub'}, 'W'+isoWeek(ws)));
+
+  const act=S.types.filter(x=>x.active && x.period!=='month');
+  const floors=act.filter(x=>!isCeil(x));
+  const ceils=act.filter(isCeil);
+  function weekTarget(x){ return x.period==='day' ? x.target*7 : x.target; }
+  function weekTot(x){ return sumRange(x.id, ws, we); }
+
+  const met=floors.filter(x=>weekTot(x)>=weekTarget(x)).length;
+  const over=ceils.filter(x=>weekTot(x)>weekTarget(x));
+  const st=el('p',{class:'status'+(over.length?' alarm':''),
+    html:'<b>'+met+' of '+floors.length+'</b> floors met. '+(over.length
+      ?'<span class="bad">'+over.length+' ceiling'+(over.length>1?'s':'')+' crossed \u2014 '
+        +over.map(x=>x.name.toLowerCase()).join(', ')+'.</span>'
+      :'Every ceiling still holding.')});
+
+  const strip=el('div',{class:'daystrip'}, DL.map((L,i)=>{
+    const dd=addDays(ws,i);
+    return el('button',{class:sameDay(dd,S.date)?'on':'', disabled:dd>t,
+      onclick:()=>{ S.date=dd; S.view='day'; render(); }}, L+' '+dd.getDate());
+  }));
+
+  function rowsFor(list, ceil){
+    return el('div',null, list.map(x=>{
+      const tot=weekTot(x), T=weekTarget(x), ov=ceil&&tot>T;
+      const dots=el('div',{class:'dots'}, [0,1,2,3,4,5,6].map(i=>{
+        const dd=addDays(ws,i); let cls='';
+        if(cnt(x.id,key(dd))>0) cls=ceil?(ov?'bad':'onx'):'on';
+        if(sameDay(dd,t)) cls+=' today';
+        return el('i',{class:cls.trim()});
+      }));
+      const tal=ceil
+        ? el('div',{class:'tally'+(T-tot<0?' over':'')}, T-tot<0?(tot-T)+' over':(T-tot)+' left')
+        : el('div',{class:'tally'+(tot>=T?' met':'')}, tot+' / '+T);
+      return el('div',{class:'row'}, el('div',{class:'name'},x.name), dots, tal);
+    }));
+  }
+
+  const scale=el('div',{class:'scale'}, [1,2,3,4,5].map(n=>
+    el('button',{'aria-pressed':String(refl.score===n),
+      onclick:async()=>{ await setRefl(key(ws), {score: refl.score===n?0:n}); render(); }}, String(n))));
+  let noteTimer=null;
+  const note=el('textarea',{placeholder:'One thing to change next week',
+    oninput:e=>{ clearTimeout(noteTimer); const v=e.target.value;
+      noteTimer=setTimeout(()=>setRefl(key(ws),{note:v}), 500); }});
+  note.value=refl.note||'';
+
+  return [head, st, strip,
+    el('section',null, el('div',{class:'head'},el('h2',null,'Floors')), rowsFor(floors,false)),
+    el('section',null, el('div',{class:'head'},el('h2',null,'Ceilings'),el('span',{class:'sub'},"what's left")), rowsFor(ceils,true)),
+    el('section',null, el('div',{class:'head'},el('h2',null,'Sunday'),el('span',{class:'sub'},'not scored')),
+      el('p',{class:'ask'},'Were you actually present with the people who matter this week?'),
+      scale, el('div',{class:'scalekey'}, el('span',null,'Barely there'), el('span',null,'Fully there')), note),
+  ];
+}
+function isoWeek(d){
+  const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const dn=x.getUTCDay()||7; x.setUTCDate(x.getUTCDate()+4-dn);
+  const y0=new Date(Date.UTC(x.getUTCFullYear(),0,1));
+  return Math.ceil((((x-y0)/86400000)+1)/7);
+}
+
+/* ---------- month view ---------- */
+let expanded=null;
+function renderMonthView(){
+  const ms=monthStart(S.date), me=monthEnd(S.date), t=todayD(), dim=me.getDate();
+  const head=el('div',{class:'viewhead'},
+    el('h2',null, MONF[ms.getMonth()]+' '+ms.getFullYear()),
+    el('span',{class:'sub'}, dim+' days'));
+  function mTarget(x){
+    if(x.period==='day') return x.target*dim;
+    if(x.period==='week') return Math.round(x.target*dim/7);
+    return x.target;
+  }
+  const act=S.types.filter(x=>x.active);
+  const floors=act.filter(x=>!isCeil(x)), ceils=act.filter(isCeil);
+
+  function heat(x){
+    const grid=el('div',{class:'grid'}, DL.map(L=>el('div',{class:'cell dow'},L)));
+    const off=(ms.getDay()+6)%7;
+    for(let i=0;i<off;i++) grid.appendChild(el('div',{class:'cell out'}));
+    for(let day=1;day<=dim;day++){
+      const dd=new Date(ms.getFullYear(),ms.getMonth(),day);
+      const c=cnt(x.id,key(dd));
+      const cell=el('div',{class:'cell'+(c>0?(isCeil(x)?' hx':' h'):'')}, c>1?String(c):'');
+      if(dd<=t){ cell.style.cursor='pointer'; cell.onclick=()=>{ S.date=dd; S.view='day'; render(); }; }
+      grid.appendChild(cell);
+    }
+    return el('div',{class:'heat'}, grid);
+  }
+  function rowsFor(list, ceil){
+    return el('div',null, list.map(x=>{
+      const tot=sumRange(x.id,ms,me), T=mTarget(x), ov=ceil&&tot>T;
+      const approx=x.period==='week'?'~':'';
+      const tal=ceil
+        ? el('div',{class:'tally'+(ov?' over':'')}, ov?(tot-T)+' over':tot+' / '+approx+T+' max')
+        : el('div',{class:'tally'+(tot>=T?' met':'')}, tot+' / '+approx+T);
+      const r=el('div',{class:'row tap', onclick:()=>{ expanded=expanded===x.id?null:x.id; render(); }},
+        el('div',{class:'name'}, x.name), tal);
+      return el('div',null, r, expanded===x.id?heat(x):null);
+    }));
+  }
+  return [head,
+    el('section',null, el('div',{class:'head'},el('h2',null,'Floors'),el('span',{class:'sub'},'tap a row for the calendar')), rowsFor(floors,false)),
+    el('section',null, el('div',{class:'head'},el('h2',null,'Ceilings')), rowsFor(ceils,true)),
+  ];
+}
+
+/* ---------- manage view ---------- */
+function renderManageView(){
+  const head=el('div',{class:'viewhead'}, el('h2',null,'Entries'),
+    el('button',{class:'headbtn', onclick:()=>{ S.editingId='new'; render(); }},'+ New'));
+  const out=[head];
+
+  if(S.firstRun){
+    out.push(el('p',{class:'status'},
+      'These six are placeholders so you can see how it works. Edit them, archive them, '
+      + 'or add your own \u2014 three shapes: counter (at least N), budget (at most N), yes/no.'));
+  }
+
+  if(S.editingId){
+    const ed=S.editingId==='new'?{name:'',kind:'floor',period:'week',target:1,active:true}:S.types.find(x=>x.id===S.editingId);
+    const nameI=el('input',{type:'text', value:ed.name, placeholder:'Name'});
+    const kindS=el('select',null,
+      el('option',{value:'floor'},'Counter \u2014 at least N per period'),
+      el('option',{value:'ceiling'},'Budget \u2014 at most N per period'),
+      el('option',{value:'binary'},'Yes / no per day'));
+    kindS.value=ed.kind;
+    const perS=el('select',null,
+      el('option',{value:'day'},'per day'),
+      el('option',{value:'week'},'per week'),
+      el('option',{value:'month'},'per month'));
+    perS.value=ed.period;
+    const tgtI=el('input',{type:'number', inputmode:'numeric', min:'0', max:'99', value:String(ed.target)});
+    const msg=el('p',{class:'msg'});
+    async function saveType(){
+      const name=nameI.value.trim();
+      if(!name){ msg.textContent='Name required.'; msg.className='msg err'; return; }
+      const body={name:name, kind:kindS.value, period:perS.value, target:Math.max(0,+tgtI.value||0)};
+      try{
+        if(S.editingId==='new'){
+          body.slug=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||('e'+Date.now());
+          body.sort=S.types.length;
+          await api('entry_types',{method:'POST', headers:{Prefer:'return=minimal'}, body:body});
+        } else {
+          await api('entry_types?id=eq.'+S.editingId,{method:'PATCH', headers:{Prefer:'return=minimal'}, body:body});
+        }
+        S.editingId=null; await loadTypes(); render();
+      }catch(e){ msg.textContent=e.message; msg.className='msg err'; }
+    }
+    async function archiveType(on){
+      try{ await api('entry_types?id=eq.'+S.editingId,{method:'PATCH', headers:{Prefer:'return=minimal'}, body:{active:on}});
+        S.editingId=null; await loadTypes(); render();
+      }catch(e){ msg.textContent=e.message; msg.className='msg err'; }
+    }
+    out.push(el('div',{class:'form'},
+      el('label',null,'Name', nameI),
+      el('label',null,'Type', kindS),
+      el('label',null,'Period', perS),
+      el('label',null,'Target', tgtI),
+      el('div',{class:'btnrow'},
+        el('button',{class:'pri', onclick:saveType},'Save'),
+        el('button',{onclick:()=>{ S.editingId=null; render(); }},'Cancel'),
+        S.editingId!=='new' ? el('button',{class:'danger', onclick:()=>archiveType(!ed.active)}, ed.active?'Archive':'Restore') : null),
+      el('p',{class:'mut'},'Archiving hides an entry from logging but keeps all its history. Changing the type or target re-scores past periods too \u2014 history is stored as raw counts.'),
+      msg));
+  }
+
+  const list=S.types.filter(x=>S.showArchived?!x.active:x.active);
+  out.push(el('section',null,
+    el('div',{class:'head'},
+      el('h2',null,S.showArchived?'Archived':'Active'),
+      el('button',{class:'headbtn', onclick:()=>{ S.showArchived=!S.showArchived; render(); }},
+        S.showArchived?'Show active':'Show archived')),
+    el('div',null, list.map(x=>
+      el('div',{class:'row tap', onclick:()=>{ S.editingId=x.id; render(); window.scrollTo(0,0); }},
+        el('div',{class:'name'}, x.name),
+        el('div',{class:'tally'},
+          (x.kind==='binary'?'yes/no':(x.kind==='floor'?'\u2265':'\u2264')+x.target)+' \u00B7 '+x.period))))));
+
+  const impT=el('textarea',{placeholder:'Paste the JSON export from the old tracker'});
+  const impMsg=el('p',{class:'msg'});
+  async function runImport(){
+    let d; try{ d=JSON.parse(impT.value); }catch(e){ impMsg.textContent='Not valid JSON.'; impMsg.className='msg err'; return; }
+    if(!d||!d.weeks){ impMsg.textContent='Not a tracker export.'; impMsg.className='msg err'; return; }
+    const bySlug={}; S.types.forEach(x=>bySlug[x.slug]=x);
+    let nLogs=0;
+    impMsg.className='msg'; impMsg.textContent='Importing\u2026';
+    try{
+      for(const wk in d.weeks){
+        const w=d.weeks[wk];
+        for(const slug in (w.counts||{})){
+          const ty=bySlug[slug]; if(!ty) continue;
+          const arr=w.counts[slug]||[];
+          for(let i=0;i<7;i++) if(arr[i]>0){ await setLog(ty.id, key(addDays(parseKey(wk),i)), arr[i]); nLogs++; }
+        }
+        if(w.score||w.note){ await getRefl(wk); await setRefl(wk,{score:w.score||0, note:w.note||''}); }
+      }
+      if(d.targets) for(const slug in d.targets){
+        const ty=bySlug[slug];
+        if(ty) await api('entry_types?id=eq.'+ty.id,{method:'PATCH', headers:{Prefer:'return=minimal'}, body:{target:d.targets[slug]}});
+      }
+      await loadTypes();
+      impMsg.textContent='Imported '+nLogs+' logs.';
+    }catch(e){ impMsg.textContent=e.message; impMsg.className='msg err'; }
+  }
+  out.push(el('section',null,
+    el('div',{class:'head'},el('h2',null,'Import old data')),
+    impT, el('div',{class:'btnrow'}, el('button',{onclick:runImport},'Import')), impMsg));
+
+  out.push(el('section',null,
+    el('div',{class:'head'},el('h2',null,'Account'),el('span',{class:'sub'}, (sess()&&sess().user&&sess().user.email)||'')),
+    el('div',{class:'btnrow'}, el('button',{onclick:()=>{ setSess(null); boot(); }},'Sign out'))));
+  return out;
+}
+
+/* ---------- auth view ---------- */
+function renderAuth(){
+  app.innerHTML='';
+  const email=el('input',{type:'email', placeholder:'Email', autocomplete:'username'});
+  const pw=el('input',{type:'password', placeholder:'Password', autocomplete:'current-password'});
+  const msg=el('p',{class:'msg'});
+  async function go(signup){
+    msg.className='msg'; msg.textContent=signup?'Creating account\u2026':'Signing in\u2026';
+    try{
+      if(signup){
+        const d=await authReq('signup',{email:email.value.trim(), password:pw.value});
+        if(d.access_token){ setSess(d); boot(); }
+        else { msg.textContent='Account created \u2014 confirm via the email you just got, then sign in.'; }
+      } else {
+        const d=await authReq('token?grant_type=password',{email:email.value.trim(), password:pw.value});
+        setSess(d); boot();
+      }
+    }catch(e){
+      var m=String(e.message||'');
+      if(m.indexOf('not_invited')>=0 || m.indexOf('Database error saving new user')>=0)
+        m='That email is not on the beta list.';
+      msg.textContent=m; msg.className='msg err';
+    }
+  }
+  app.appendChild(el('div',{class:'auth'},
+    el('h1',null,'Ledger'), email, pw,
+    el('div',{class:'btnrow'},
+      el('button',{class:'pri', onclick:()=>go(false)},'Sign in'),
+      el('button',{onclick:()=>go(true)},'Create account')),
+    msg));
+}
+
+/* ---------- boot + render ---------- */
+async function render(){
+  const tok=++S.renderToken;
+  try{
+    if(S.view==='day'){
+      const d=S.date;
+      await ensureRange(monthStart(d), monthEnd(d));
+      await ensureRange(mondayOf(d), addDays(mondayOf(d),6));
+      if(tok!==S.renderToken) return;
+      shell(renderDayView());
+    } else if(S.view==='week'){
+      const ws=mondayOf(S.date);
+      await ensureRange(ws, addDays(ws,6));
+      const refl=await getRefl(key(ws));
+      if(tok!==S.renderToken) return;
+      shell(renderWeekView(refl));
+    } else if(S.view==='month'){
+      await ensureRange(monthStart(S.date), monthEnd(S.date));
+      if(tok!==S.renderToken) return;
+      shell(renderMonthView());
+    } else {
+      shell(renderManageView());
+    }
+  }catch(e){ toast(e.message); }
+}
+async function boot(){
+  if(!sess()){ renderAuth(); return; }
+  app.innerHTML='<p class="mut" style="margin-top:40vh;text-align:center">Loading\u2026</p>';
+  try{
+    await loadTypes();
+    S.firstRun = await seedIfEmpty();
+    S.view = S.firstRun ? 'manage' : 'day';
+    S.date=todayD();
+    render();
+  }catch(e){
+    if(String(e.message).indexOf('signed out')>=0){ renderAuth(); }
+    else { toast(e.message); renderAuth(); }
+  }
+}
+boot();
+</script>
