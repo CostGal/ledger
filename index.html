@@ -8,6 +8,10 @@
 <meta name="theme-color" content="#000000">
 <meta name="format-detection" content="telephone=no">
 <title>Ledger</title>
+<!-- Relative hrefs: the same files are served both under /ledger/ and at a host root. -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png" type="image/png">
 <style>
   :root{
     --bg:#000; --card:#141413; --card2:#1D1D1B; --rule:#2C2C29;
@@ -149,10 +153,17 @@
   #toast{position:fixed; left:16px; right:16px; bottom:calc(env(safe-area-inset-bottom) + 84px); z-index:20;
     background:var(--bad-soft); border:1px solid var(--bad); color:var(--ink); border-radius:11px;
     padding:12px 14px; font-size:14px; display:none}
+  /* Content is never blanked while loading, so this thin bar is the only cue
+     that a fetch is in flight. Fixed, so it costs no layout. */
+  #load{position:fixed; left:0; top:0; height:2px; width:100%; z-index:30;
+    background:var(--acc); transform:scaleX(0); transform-origin:left;
+    transition:transform .25s ease-out; pointer-events:none}
+  #load.on{transform:scaleX(.9)}
   button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--acc); outline-offset:3px}
 </style>
 
 <div id="app"></div>
+<div id="load"></div>
 <div id="toast"></div>
 
 <script>
@@ -198,6 +209,19 @@ function sameDay(a,b){ return key(a)===key(b); }
 function todayD(){ const t=new Date(); t.setHours(0,0,0,0); return t; }
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block';
   clearTimeout(toast._x); toast._x=setTimeout(()=>t.style.display='none', 4000); }
+let busyN=0;
+function busy(on){ busyN=Math.max(0, busyN+(on?1:-1));
+  document.getElementById('load').classList.toggle('on', busyN>0); }
+/* Rebuilds one subtree in place, leaving scroll position, focus and the rest of
+   the document alone. build(redraw) returns a fresh node; call redraw() after
+   changing state that only that subtree reads. No wrapper element — one would
+   break the .chips / .toggles flex layouts. */
+function live(build){
+  const box={};
+  box.redraw=()=>{ const n=build(box.redraw); box.node.replaceWith(n); box.node=n; };
+  box.node=build(box.redraw);
+  return box.node;
+}
 
 /* ---------- auth + api ---------- */
 function sess(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
@@ -238,28 +262,57 @@ async function api(path, opts, retry){
 const S={ view:'day', date:todayD(), types:[], logs:{}, loaded:new Set(), refl:{}, editingId:null, showArchived:false, firstRun:false, renderToken:0 };
 function monthKeyOf(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 async function loadTypes(){ S.types=await api('entry_types?select=*&order=sort.asc,created_at.asc'); }
+async function fetchMonth(m){
+  const rows=await api('logs?select=entry_type_id,date,count&date=gte.'+key(m)+'&date=lte.'+key(monthEnd(m)));
+  rows.forEach(r=>{ if(!S.logs[r.date]) S.logs[r.date]={}; S.logs[r.date][r.entry_type_id]=r.count; });
+  S.loaded.add(monthKeyOf(m));
+}
+/* Months already being fetched, so overlapping callers share one request. The
+   day view asks for its month and its week, which usually overlap, and boot
+   now fires those concurrently. */
+const inflight={};
 async function ensureRange(a,b){
-  const x=new Date(a.getFullYear(), a.getMonth(), 1);
+  const x=new Date(a.getFullYear(), a.getMonth(), 1), jobs=[];
   while(x<=b){
     const mk=monthKeyOf(x);
     if(!S.loaded.has(mk)){
-      const rows=await api('logs?select=entry_type_id,date,count&date=gte.'+key(x)+'&date=lte.'+key(monthEnd(x)));
-      rows.forEach(r=>{ if(!S.logs[r.date]) S.logs[r.date]={}; S.logs[r.date][r.entry_type_id]=r.count; });
-      S.loaded.add(mk);
+      if(!inflight[mk]) inflight[mk]=fetchMonth(new Date(x)).finally(()=>{ delete inflight[mk]; });
+      jobs.push(inflight[mk]);
     }
     x.setMonth(x.getMonth()+1);
   }
+  if(jobs.length) await Promise.all(jobs);
+}
+/* One write in flight per key, always writing the newest value. Serialising
+   matters: two quick taps would otherwise both PATCH (matching no row yet) and
+   then both POST, inserting the same (entry_type_id, date) twice. Returns a
+   promise so callers that need to stay sequential — runImport — still can. */
+const W={};
+function pushWrite(k, want, send){
+  const w = W[k] || (W[k]={busy:false, done:Promise.resolve()});
+  w.want = want;
+  if(!w.busy){
+    w.busy = true;
+    w.done = (async()=>{
+      try{ let last; while(w.want!==last){ const v=w.want; await send(v); last=v; } }
+      catch(e){ toast('Not saved — '+e.message); }
+      w.busy = false;
+    })();
+  }
+  return w.done;
 }
 function cnt(id, dk){ return (S.logs[dk] && S.logs[dk][id]) || 0; }
-async function setLog(id, dk, count){
+/* Updates S synchronously so the UI can repaint in the same task as the tap;
+   the network write goes out behind it. */
+function setLog(id, dk, count){
   if(!S.logs[dk]) S.logs[dk]={};
   S.logs[dk][id]=count;
-  try{
+  return pushWrite('log:'+id+':'+dk, count, async v=>{
     const upd=await api('logs?entry_type_id=eq.'+id+'&date=eq.'+dk,
-      {method:'PATCH', headers:{Prefer:'return=representation'}, body:{count:count}});
+      {method:'PATCH', headers:{Prefer:'return=representation'}, body:{count:v}});
     if(!upd.length) await api('logs',{method:'POST', headers:{Prefer:'return=minimal'},
-      body:{entry_type_id:id, date:dk, count:count}});
-  }catch(e){ toast('Not saved — '+e.message); }
+      body:{entry_type_id:id, date:dk, count:v}});
+  });
 }
 function periodRange(t, d){
   if(t.period==='day') return [d,d];
@@ -276,14 +329,18 @@ async function getRefl(wk){
   S.refl[wk]=rows[0]||{week_start:wk, score:0, note:''};
   return S.refl[wk];
 }
-async function setRefl(wk, patch){
-  Object.assign(S.refl[wk], patch);
-  try{
+/* Keyed on the week, not the field: score and note writes against a row that
+   doesn't exist yet would otherwise each POST and duplicate it. */
+function setRefl(wk, patch){
+  const r = S.refl[wk] || (S.refl[wk]={week_start:wk, score:0, note:''});
+  Object.assign(r, patch);
+  return pushWrite('refl:'+wk, JSON.stringify([r.score, r.note]), async()=>{
+    const body={score:r.score, note:r.note};
     const upd=await api('reflections?week_start=eq.'+wk,
-      {method:'PATCH', headers:{Prefer:'return=representation'}, body:patch});
+      {method:'PATCH', headers:{Prefer:'return=representation'}, body:body});
     if(!upd.length) await api('reflections',{method:'POST', headers:{Prefer:'return=minimal'},
-      body:Object.assign({week_start:wk}, patch)});
-  }catch(e){ toast('Not saved — '+e.message); }
+      body:Object.assign({week_start:wk}, body)});
+  });
 }
 
 /* ---------- seed ---------- */
@@ -302,7 +359,12 @@ async function seedIfEmpty(){
 
 /* ---------- shell ---------- */
 const app=document.getElementById('app');
+/* Emptying #app collapses the document height, which makes the browser clamp
+   scrollY to 0 — so capture it first. Staying in the same view keeps your
+   place; switching tabs starts at the top. */
+let shownView=null;
 function shell(content){
+  const y = shownView===S.view ? window.scrollY : 0;
   app.innerHTML='';
   app.appendChild(el('div',{class:'topbar'},
     el('h1',null,'Ledger'),
@@ -312,6 +374,8 @@ function shell(content){
   app.appendChild(el('div',{class:'tabbar'},
     tab('day','Day'), tab('week','Week'), tab('month','Month'), tab('manage','Entries')
   ));
+  shownView=S.view;
+  if(window.scrollY!==y) window.scrollTo(0,y);
 }
 function tab(v,label){
   return el('button',{class:S.view===v?'on':'', onclick:()=>{ S.view=v; render(); }}, label);
@@ -354,31 +418,34 @@ function renderDayView(){
   const floors=act.filter(x=>x.kind==='floor');
   const ceils=act.filter(x=>x.kind==='ceiling');
 
-  const togs=el('div',{class:'toggles'}, bins.map(b=>{
+  /* Each entry is its own live region: nothing outside a toggle or chip reads
+     its count, so a tap redraws just that node and the page never moves. */
+  const togs=el('div',{class:'toggles'}, bins.map(b=>live(redraw=>{
     const on=cnt(b.id,dk)>0;
     const tot=periodTot(b,d);
-    return el('button',{class:'tog','aria-pressed':String(on), onclick:async()=>{ await setLog(b.id,dk,on?0:1); render(); }},
+    return el('button',{class:'tog','aria-pressed':String(on), onclick:()=>{ setLog(b.id,dk,on?0:1); redraw(); }},
       el('span',{class:'box'},'\u2713'), b.name,
       el('span',{class:'sub'}, tot+'/'+b.target+' '+periodLabel(b.period)));
-  }));
+  })));
 
-  function chip(x){
+  function chip(x, redraw){
     const n=cnt(x.id,dk), tot=periodTot(x,d), T=x.target;
     const over=isCeil(x)&&tot>T, met=!isCeil(x)&&tot>=T;
     const c=el('div',{class:'chip'+(over?' over':'')+(met?' met':'')});
     if(n>0) c.appendChild(el('button',{class:'minus','aria-label':'Remove one '+x.name,
-      onclick:async e=>{ e.stopPropagation(); await setLog(x.id,dk,Math.max(0,n-1)); render(); }},'\u2013'));
-    c.appendChild(el('button',{class:'lbl', onclick:async()=>{ await setLog(x.id,dk,n+1); render(); }},
+      onclick:e=>{ e.stopPropagation(); setLog(x.id,dk,Math.max(0,n-1)); redraw(); }},'\u2013'));
+    c.appendChild(el('button',{class:'lbl', onclick:()=>{ setLog(x.id,dk,n+1); redraw(); }},
       el('span',{class:'txt'}, el('span',null,x.name),
         el('span',{class:'prog'}, tot+'/'+T+' '+periodLabel(x.period)+(isCeil(x)?' max':''))),
       n>0?el('span',{class:'n'},String(n)):null));
     return c;
   }
+  const chipFor=x=>live(redraw=>chip(x, redraw));
 
   return [head,
     bins.length?el('section',null, el('div',{class:'head'},el('h2',null,'Daily'),el('span',{class:'sub'},'tap = done')), togs):null,
-    floors.length?el('section',null, el('div',{class:'head'},el('h2',null,'Counters')), el('div',{class:'chips'}, floors.map(chip))):null,
-    ceils.length?el('section',null, el('div',{class:'head'},el('h2',null,'Budgets')), el('div',{class:'chips'}, ceils.map(chip))):null,
+    floors.length?el('section',null, el('div',{class:'head'},el('h2',null,'Counters')), el('div',{class:'chips'}, floors.map(chipFor))):null,
+    ceils.length?el('section',null, el('div',{class:'head'},el('h2',null,'Budgets')), el('div',{class:'chips'}, ceils.map(chipFor))):null,
   ].filter(Boolean);
 }
 
@@ -425,13 +492,18 @@ function renderWeekView(refl){
     }));
   }
 
-  const scale=el('div',{class:'scale'}, [1,2,3,4,5].map(n=>
+  /* Only these five buttons read the score, and keeping the textarea outside
+     the live region is what stops a score tap from rebuilding it mid-sentence. */
+  const scale=live(redraw=>el('div',{class:'scale'}, [1,2,3,4,5].map(n=>
     el('button',{'aria-pressed':String(refl.score===n),
-      onclick:async()=>{ await setRefl(key(ws), {score: refl.score===n?0:n}); render(); }}, String(n))));
+      onclick:()=>{ setRefl(key(ws), {score: refl.score===n?0:n}); redraw(); }}, String(n)))));
   let noteTimer=null;
+  /* State updates on every keystroke, only the network write is debounced —
+     otherwise a re-render inside the debounce window would repaint stale text
+     over what was just typed. */
   const note=el('textarea',{placeholder:'One thing to change next week',
-    oninput:e=>{ clearTimeout(noteTimer); const v=e.target.value;
-      noteTimer=setTimeout(()=>setRefl(key(ws),{note:v}), 500); }});
+    oninput:e=>{ refl.note=e.target.value; clearTimeout(noteTimer);
+      noteTimer=setTimeout(()=>setRefl(key(ws),{note:refl.note}), 500); }});
   note.value=refl.note||'';
 
   return [head, st, strip,
@@ -637,43 +709,58 @@ function renderAuth(){
 }
 
 /* ---------- boot + render ---------- */
-async function render(){
+/* The date span the current view reads. Day needs its own month as well as its
+   week, which can straddle two months. */
+function viewSpan(){
+  const d=S.date;
+  if(S.view==='week'){ const ws=mondayOf(d); return [ws, addDays(ws,6)]; }
+  if(S.view==='month') return [monthStart(d), monthEnd(d)];
+  return [minD(monthStart(d), mondayOf(d)), maxD(monthEnd(d), addDays(mondayOf(d),6))];
+}
+function minD(a,b){ return a<b?a:b; }
+function maxD(a,b){ return a>b?a:b; }
+function dataReady(){
+  if(S.view==='manage') return true;
+  const s=viewSpan(), x=new Date(s[0].getFullYear(), s[0].getMonth(), 1);
+  while(x<=s[1]){ if(!S.loaded.has(monthKeyOf(x))) return false; x.setMonth(x.getMonth()+1); }
+  return S.view!=='week' || S.refl[key(mondayOf(S.date))]!==undefined;
+}
+function draw(){
+  if(S.view==='day') shell(renderDayView());
+  else if(S.view==='week'){ const wk=key(mondayOf(S.date));
+    shell(renderWeekView(S.refl[wk] || {week_start:wk, score:0, note:''})); }
+  else if(S.view==='month') shell(renderMonthView());
+  else shell(renderManageView());
+}
+/* Draws straight away when the data is already cached \u2014 same task as the tap,
+   no await, no yield. Otherwise the current screen stays put (never blanked,
+   never drawn with missing numbers) until the fetch lands. */
+function render(){
+  if(dataReady()){ draw(); return; }
   const tok=++S.renderToken;
-  try{
-    if(S.view==='day'){
-      const d=S.date;
-      await ensureRange(monthStart(d), monthEnd(d));
-      await ensureRange(mondayOf(d), addDays(mondayOf(d),6));
-      if(tok!==S.renderToken) return;
-      shell(renderDayView());
-    } else if(S.view==='week'){
-      const ws=mondayOf(S.date);
-      await ensureRange(ws, addDays(ws,6));
-      const refl=await getRefl(key(ws));
-      if(tok!==S.renderToken) return;
-      shell(renderWeekView(refl));
-    } else if(S.view==='month'){
-      await ensureRange(monthStart(S.date), monthEnd(S.date));
-      if(tok!==S.renderToken) return;
-      shell(renderMonthView());
-    } else {
-      shell(renderManageView());
-    }
-  }catch(e){ toast(e.message); }
+  const s=viewSpan();
+  busy(true);
+  Promise.all([ensureRange(s[0], s[1])].concat(S.view==='week'?[getRefl(key(mondayOf(S.date)))]:[]))
+    .then(()=>{ if(tok===S.renderToken) draw(); })
+    .catch(e=>toast(e.message))
+    .then(()=>busy(false));
 }
 async function boot(){
   if(!sess()){ renderAuth(); return; }
-  app.innerHTML='<p class="mut" style="margin-top:40vh;text-align:center">Loading\u2026</p>';
+  S.view='day'; S.date=todayD();
+  draw();                       // app chrome on the first frame, not a blank page
+  busy(true);
   try{
-    await loadTypes();
+    const s=viewSpan();
+    await Promise.all([loadTypes(), ensureRange(s[0], s[1])]);
     S.firstRun = await seedIfEmpty();
-    S.view = S.firstRun ? 'manage' : 'day';
-    S.date=todayD();
-    render();
+    if(S.firstRun) S.view='manage';
+    draw();
   }catch(e){
     if(String(e.message).indexOf('signed out')>=0){ renderAuth(); }
     else { toast(e.message); renderAuth(); }
   }
+  busy(false);
 }
 boot();
 </script>
