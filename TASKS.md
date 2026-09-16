@@ -1,6 +1,6 @@
 # Tasks
 
-**Beta build:** both repos' `main` were in sync as of the last merge (password reset, icon/manifest fixes, emoji icons, unsaved-write badge). This repo has three more features on top of that, each not yet merged or promoted to `ledger-beta`: per-entry notes (#11, PR #20), undo for mis-taps (#12, PR #21, stacked on #20 — merge that first), and data export (#13, PR #23, independent). If friends report a build missing any of these, that's expected until they promote — not a bug.
+**Beta build:** `ledger`'s `main` now has per-entry notes (#11), undo for mis-taps (#12), and data export (#13) merged, on top of the earlier password reset / icon / emoji-icon / unsaved-write-badge baseline. Not yet promoted to `ledger-beta` — that repo is still on the earlier baseline until this gets copied over. If friends report a build missing notes/undo/export, that's expected until it promotes — not a bug.
 
 **GitHub issues:** every In progress / Queued item below is mirrored as an issue in this repo (`CostGal/ledger`), tagged `[kostas]` or `[claude]` in its title to match. Issue number is noted in parens after each item. When ticking an item here, close the matching issue in the same pass (and vice versa) — this list and the issue tracker are meant to stay in sync, not duplicate independently.
 
@@ -16,8 +16,6 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 - [ ] [kostas] Run the Resend→Supabase integration on `ledger-beta`; confirm SMTP settings are populated in that project's dashboard the same way as sandbox's. (#8)
 - [ ] [kostas] Save the weekly CSV export query in both Supabase projects. (#9)
 - [ ] [kostas] Supabase webhook on new signup → Make → notification. (#10)
-- [ ] [claude] Per-entry notes on a log. (#11)
-- [ ] [claude] Undo for mis-taps. (#12)
 - [ ] [claude] Week review screen: ceilings crossed vs. floors missed, patterns across weeks. Present as observations, never as causal claims. (The current Week view is single-week status only — `renderWeekView` has no cross-week comparison yet.) (#14)
 - [ ] [claude] Yearly heatmap view. (#15)
 - [ ] [claude] Day-of-week breakdown per entry. (#16)
@@ -26,7 +24,10 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 
 ## Done
 
-- [x] [claude] Per-user data export: a "Download my data" button in Manage view exports everything the account owns (entry types, logs with notes, reflections) as one JSON file, mirroring the existing importer's slug-based shape. Read-only, no schema change. Verified with a mocked Playwright preview, including inspecting the actual downloaded file contents. On branch `claude/data-export`, PR #23 — independent of #20/#21, not yet merged or promoted to beta. (#13, closed)
+- [x] [claude] Per-user data export: a "Download my data" button in Manage view exports everything the account owns (entry types, logs with notes, reflections) as one JSON file, mirroring the existing importer's slug-based shape. Read-only, no schema change. Verified with a mocked Playwright preview, including inspecting the actual downloaded file contents. Merged via PR #23. (#13, closed)
+- [x] [claude] Undo for mis-taps: a tap on a counter chip (+1 or minus) or a binary toggle shows a neutral undo toast (a new `#undo` element, deliberately not the red-styled `#toast` used for errors) with an Undo button that reverts just that tap. Only the most recent tap is undoable. Previewed with a mocked screenshot before pushing (confirmed both counter and toggle revert correctly). Merged via PR #21. (#12, closed)
+- [x] [claude] Per-entry notes on a log: a pencil button on each chip/toggle opens a free-text note for that entry on the viewed date, in a section below the chips (not inline in the flex-wrap row). Pencil turns accent-colored once a note exists. New `S.logNotes` cache alongside `S.logs` — `cnt()`/`sumRange()`/`periodTot()` untouched. New nullable `note` column on `logs` in both Supabase projects. Previewed with a mocked screenshot before pushing. Merged via PR #20. (#11, closed)
+- [x] [claude] Documented the task workflow (plain-language rundowns, discuss-first for bigger calls, structural problems get options + a recommendation) in `CLAUDE.md`. Merged via PR #22.
 - [x] [claude] Per-entry emoji icon: optional icon field on entry types, shown to the right of the name everywhere (Day chips/toggles, Week/Month rows, Manage list and edit form) — never inside the name field itself. Presets on the six seeded placeholders (💪 Exercise, 🏃 Run, 📖 Read, 😴 Slept 7h+, 🥡 Takeout, 🌙 Late night). Picking is a plain text input using the OS emoji keyboard, no custom widget. New nullable `icon` column added to `entry_types` on both Supabase projects — confirmed no existing rows affected (25 beta / 12 sandbox entries, all intact). Previewed with a mocked screenshot before pushing, which caught a real crash bug in the #7 change below (fixed in the same commit). (#19, closed)
 - [x] [claude] Failed-write visibility: chips/toggles now show a persistent off-white badge with a red dot while their last write is still failed, clearing once it retries successfully (on the next tap, or after an `online` reconnect). Deliberate, narrow exception to "red = exceeded ceiling only" — Kostas's explicit choice, documented in `CLAUDE.md`. (#7, closed)
 - [x] [claude] Auth screen: remembers the last-used email per environment now (prefilled + saved on input), and `boot()` no longer resets `S.view`/`S.date` to Day/today on every call — a forced re-auth or manual sign-out/back-in keeps the user's place. (#6, closed)
