@@ -35,7 +35,7 @@ Both projects carry the identical schema: `entry_types`, `logs`, `reflections`.
 The visual design is settled and deliberate. Keep it:
 
 - Black background; `#D97757` as the only accent
-- `#E5484D` (red) is reserved **strictly** for a ceiling that has been exceeded — never for generic errors, warnings, or emphasis
+- `#E5484D` (red) is reserved for a ceiling that has been exceeded, with exactly one other sanctioned use: the small dot inside the `.unsaved` badge marking a chip/toggle whose write hasn't saved yet. The badge itself is off-white (`var(--ink)`), not red, so it never reads as a ceiling warning. No other error/warning/emphasis use of red — that still goes through `toast()` instead.
 - Futura stack throughout (`--fut`)
 - iOS-first; minimum 44pt tap targets; `env(safe-area-inset-*)` respected on all four edges
 

@@ -70,7 +70,7 @@
 
   .toggles{display:flex; flex-direction:column; gap:8px}
   .tog{
-    display:flex; align-items:center; gap:14px; width:100%; min-height:56px;
+    position:relative; display:flex; align-items:center; gap:14px; width:100%; min-height:56px;
     padding:15px 16px; background:var(--card); text-align:left;
     border:1px solid var(--rule); border-radius:12px; font-size:17px;
   }
@@ -80,7 +80,13 @@
   .tog[aria-pressed="true"] .box{background:var(--acc); border-color:var(--acc); color:#100E0D}
 
   .chips{display:flex; flex-wrap:wrap; gap:8px}
-  .chip{display:inline-flex; align-items:stretch; overflow:hidden; min-height:52px; background:var(--card); border:1px solid var(--rule); border-radius:16px}
+  .chip{position:relative; display:inline-flex; align-items:stretch; overflow:hidden; min-height:52px; background:var(--card); border:1px solid var(--rule); border-radius:16px}
+  /* A save that failed shows this on its chip/toggle until it retries successfully.
+     Deliberate one-off exception to "red = exceeded ceiling only": the dot is red,
+     the badge itself is off-white so it never reads as a ceiling warning. */
+  .unsaved{position:absolute; top:6px; right:6px; width:13px; height:13px; border-radius:50%;
+    background:var(--ink); display:grid; place-items:center; pointer-events:none}
+  .unsaved::after{content:''; width:5px; height:5px; border-radius:50%; background:var(--bad)}
   .chip .lbl{display:flex; align-items:center; gap:10px; padding:6px 16px; background:none; border:0; font-size:16px; text-align:left}
   .chip .txt{display:flex; flex-direction:column; align-items:flex-start; gap:1px}
   .chip .prog{font-size:11.5px; color:var(--ink2); letter-spacing:.02em}
@@ -332,8 +338,20 @@ function pushWrite(k, want, send){
   if(!w.busy) runWrite(k);
   return w.done;
 }
+/* A small off-white badge with a red dot, shown on a chip/toggle whose last
+   write is still failed. The red here is a deliberate, narrow exception to
+   "red = exceeded ceiling only" — Kostas asked for it explicitly for this
+   one case (a save that didn't go through), not as generic error styling. */
+function unsavedBadge(k){
+  return (W[k] && W[k].failed) ? el('span',{class:'unsaved','aria-label':'Not saved — will retry'}) : null;
+}
 window.addEventListener('online', ()=>{
-  Object.keys(W).forEach(k=>{ if(W[k].failed && !W[k].busy) runWrite(k); });
+  const keys=Object.keys(W).filter(k=>W[k].failed && !W[k].busy);
+  if(!keys.length) return;
+  keys.forEach(k=>runWrite(k));
+  /* Writes optimistically updated S already; once every retry settles,
+     one full redraw clears (or keeps) each chip's badge to match. */
+  Promise.all(keys.map(k=>W[k].done)).then(draw);
 });
 function cnt(id, dk){ return (S.logs[dk] && S.logs[dk][id]) || 0; }
 /* Updates S synchronously so the UI can repaint in the same task as the tap;
@@ -457,9 +475,10 @@ function renderDayView(){
   const togs=el('div',{class:'toggles'}, bins.map(b=>live(redraw=>{
     const on=cnt(b.id,dk)>0;
     const tot=periodTot(b,d);
-    return el('button',{class:'tog','aria-pressed':String(on), onclick:()=>{ setLog(b.id,dk,on?0:1); redraw(); }},
+    return el('button',{class:'tog','aria-pressed':String(on), onclick:()=>{ setLog(b.id,dk,on?0:1).then(redraw); redraw(); }},
       el('span',{class:'box'},'\u2713'), b.name,
-      el('span',{class:'sub'}, tot+'/'+b.target+' '+periodLabel(b.period)));
+      el('span',{class:'sub'}, tot+'/'+b.target+' '+periodLabel(b.period)),
+      unsavedBadge('log:'+b.id+':'+dk));
   })));
 
   function chip(x, redraw){
@@ -467,11 +486,12 @@ function renderDayView(){
     const over=isCeil(x)&&tot>T, met=!isCeil(x)&&tot>=T;
     const c=el('div',{class:'chip'+(over?' over':'')+(met?' met':'')});
     if(n>0) c.appendChild(el('button',{class:'minus','aria-label':'Remove one '+x.name,
-      onclick:e=>{ e.stopPropagation(); setLog(x.id,dk,Math.max(0,n-1)); redraw(); }},'\u2013'));
-    c.appendChild(el('button',{class:'lbl', onclick:()=>{ setLog(x.id,dk,n+1); redraw(); }},
+      onclick:e=>{ e.stopPropagation(); setLog(x.id,dk,Math.max(0,n-1)).then(redraw); redraw(); }},'\u2013'));
+    c.appendChild(el('button',{class:'lbl', onclick:()=>{ setLog(x.id,dk,n+1).then(redraw); redraw(); }},
       el('span',{class:'txt'}, el('span',null,x.name),
         el('span',{class:'prog'}, tot+'/'+T+' '+periodLabel(x.period)+(isCeil(x)?' max':''))),
       n>0?el('span',{class:'n'},String(n)):null));
+    c.appendChild(unsavedBadge('log:'+x.id+':'+dk));
     return c;
   }
   const chipFor=x=>live(redraw=>chip(x, redraw));
