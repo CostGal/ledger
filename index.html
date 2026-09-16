@@ -150,6 +150,8 @@
   .auth{max-width:360px; margin:12vh auto 0; display:flex; flex-direction:column; gap:12px}
   .auth h1{font-size:26px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px}
   .auth input{width:100%}
+  .authlink{background:none; border:none; min-height:auto; padding:2px 0; align-self:flex-start;
+    font-size:13.5px; color:var(--ink2); text-decoration:underline}
   #toast{position:fixed; left:16px; right:16px; bottom:calc(env(safe-area-inset-bottom) + 84px); z-index:20;
     background:var(--bad-soft); border:1px solid var(--bad); color:var(--ink); border-radius:11px;
     padding:12px 14px; font-size:14px; display:none}
@@ -233,6 +235,23 @@ async function authReq(path, body){
   if(!r.ok) throw new Error(d.msg||d.error_description||d.message||('Auth error '+r.status));
   return d;
 }
+async function authPut(path, body, token){
+  const r=await fetch(SB_URL+'/auth/v1/'+path,{method:'PUT',
+    headers:{apikey:SB_KEY,'Content-Type':'application/json',Authorization:'Bearer '+token}, body:JSON.stringify(body)});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.msg||d.error_description||d.message||('Auth error '+r.status));
+  return d;
+}
+/* Supabase's recovery email redirects here with the session in the URL
+   fragment (never sent to a server) rather than as a query string. */
+function recoveryFromHash(){
+  const h=location.hash.replace(/^#/,'');
+  if(!h) return null;
+  const p=new URLSearchParams(h);
+  if(p.get('type')!=='recovery' || !p.get('access_token')) return null;
+  return {access_token:p.get('access_token'), refresh_token:p.get('refresh_token'),
+    expires_in:+p.get('expires_in')||3600, token_type:p.get('token_type')||'bearer'};
+}
 let refreshing=null;
 async function refreshSession(){
   if(refreshing) return refreshing;
@@ -259,7 +278,8 @@ async function api(path, opts, retry){
 }
 
 /* ---------- data ---------- */
-const S={ view:'day', date:todayD(), types:[], logs:{}, loaded:new Set(), refl:{}, editingId:null, showArchived:false, firstRun:false, renderToken:0 };
+const S={ view:'day', date:todayD(), types:[], logs:{}, loaded:new Set(), refl:{}, editingId:null, showArchived:false, firstRun:false, renderToken:0, recovery:recoveryFromHash() };
+if(S.recovery) history.replaceState(null,'',location.pathname+location.search);
 function monthKeyOf(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 async function loadTypes(){ S.types=await api('entry_types?select=*&order=sort.asc,created_at.asc'); }
 async function fetchMonth(m){
@@ -286,21 +306,34 @@ async function ensureRange(a,b){
 /* One write in flight per key, always writing the newest value. Serialising
    matters: two quick taps would otherwise both PATCH (matching no row yet) and
    then both POST, inserting the same (entry_type_id, date) twice. Returns a
-   promise so callers that need to stay sequential — runImport — still can. */
+   promise so callers that need to stay sequential — runImport — still can.
+   A write that fails stays in W with failed=true rather than being dropped,
+   so the 'online' handler below can replay it once the connection is back —
+   otherwise the UI (already updated optimistically) would silently lie about
+   having saved. */
 const W={};
+function runWrite(k){
+  const w=W[k];
+  w.busy=true; w.failed=false;
+  w.done=(async()=>{
+    try{
+      let last; while(w.want!==last){ const v=w.want; await w.send(v); last=v; }
+      w.busy=false;
+    }catch(e){
+      w.busy=false; w.failed=true;
+      toast(navigator.onLine===false ? 'Offline — will save once back online' : 'Not saved — '+e.message);
+    }
+  })();
+}
 function pushWrite(k, want, send){
-  const w = W[k] || (W[k]={busy:false, done:Promise.resolve()});
-  w.want = want;
-  if(!w.busy){
-    w.busy = true;
-    w.done = (async()=>{
-      try{ let last; while(w.want!==last){ const v=w.want; await send(v); last=v; } }
-      catch(e){ toast('Not saved — '+e.message); }
-      w.busy = false;
-    })();
-  }
+  const w = W[k] || (W[k]={busy:false, failed:false, done:Promise.resolve()});
+  w.want = want; w.send = send;
+  if(!w.busy) runWrite(k);
   return w.done;
 }
+window.addEventListener('online', ()=>{
+  Object.keys(W).forEach(k=>{ if(W[k].failed && !W[k].busy) runWrite(k); });
+});
 function cnt(id, dk){ return (S.logs[dk] && S.logs[dk][id]) || 0; }
 /* Updates S synchronously so the UI can repaint in the same task as the tap;
    the network write goes out behind it. */
@@ -679,6 +712,7 @@ function renderManageView(){
 /* ---------- auth view ---------- */
 function renderAuth(){
   app.innerHTML='';
+  let forgot=false;
   const email=el('input',{type:'email', placeholder:'Email', autocomplete:'username'});
   const pw=el('input',{type:'password', placeholder:'Password', autocomplete:'current-password'});
   const msg=el('p',{class:'msg'});
@@ -700,11 +734,51 @@ function renderAuth(){
       msg.textContent=m; msg.className='msg err';
     }
   }
+  async function sendReset(){
+    msg.className='msg'; msg.textContent='Sending reset link\u2026';
+    try{
+      await authReq('recover?redirect_to='+encodeURIComponent(location.origin+location.pathname),
+        {email:email.value.trim()});
+      msg.textContent='Check your email for a reset link.';
+    }catch(e){ msg.textContent=e.message; msg.className='msg err'; }
+  }
+  function draw2(){
+    app.innerHTML='';
+    app.appendChild(el('div',{class:'auth'},
+      el('h1',null,'Ledger'),
+      email,
+      forgot ? null : pw,
+      forgot
+        ? el('div',{class:'btnrow'},
+            el('button',{class:'pri', onclick:sendReset},'Send reset link'),
+            el('button',{onclick:()=>{ forgot=false; msg.className='msg'; msg.textContent=''; draw2(); }},'Back'))
+        : el('div',{class:'btnrow'},
+            el('button',{class:'pri', onclick:()=>go(false)},'Sign in'),
+            el('button',{onclick:()=>go(true)},'Create account')),
+      forgot ? null : el('button',{class:'authlink', onclick:()=>{ forgot=true; msg.className='msg'; msg.textContent=''; draw2(); }},'Forgot password?'),
+      msg));
+  }
+  draw2();
+}
+
+/* ---------- password reset (arrived here via a Supabase recovery link) ---------- */
+function renderResetPassword(rec){
+  app.innerHTML='';
+  const pw=el('input',{type:'password', placeholder:'New password', autocomplete:'new-password'});
+  const pw2=el('input',{type:'password', placeholder:'Confirm new password', autocomplete:'new-password'});
+  const msg=el('p',{class:'msg'});
+  async function go(){
+    if(pw.value.length<6){ msg.textContent='Password must be at least 6 characters.'; msg.className='msg err'; return; }
+    if(pw.value!==pw2.value){ msg.textContent='Passwords don\u2019t match.'; msg.className='msg err'; return; }
+    msg.className='msg'; msg.textContent='Saving\u2026';
+    try{
+      await authPut('user', {password:pw.value}, rec.access_token);
+      S.recovery=null; setSess(rec); boot();
+    }catch(e){ msg.textContent=e.message; msg.className='msg err'; }
+  }
   app.appendChild(el('div',{class:'auth'},
-    el('h1',null,'Ledger'), email, pw,
-    el('div',{class:'btnrow'},
-      el('button',{class:'pri', onclick:()=>go(false)},'Sign in'),
-      el('button',{onclick:()=>go(true)},'Create account')),
+    el('h1',null,'Set new password'), pw, pw2,
+    el('div',{class:'btnrow'}, el('button',{class:'pri', onclick:go},'Save password')),
     msg));
 }
 
@@ -742,10 +816,11 @@ function render(){
   busy(true);
   Promise.all([ensureRange(s[0], s[1])].concat(S.view==='week'?[getRefl(key(mondayOf(S.date)))]:[]))
     .then(()=>{ if(tok===S.renderToken) draw(); })
-    .catch(e=>toast(e.message))
+    .catch(e=>toast(navigator.onLine===false ? 'Offline — can’t load that yet.' : e.message))
     .then(()=>busy(false));
 }
 async function boot(){
+  if(S.recovery){ renderResetPassword(S.recovery); return; }
   if(!sess()){ renderAuth(); return; }
   S.view='day'; S.date=todayD();
   draw();                       // app chrome on the first frame, not a blank page
@@ -758,7 +833,12 @@ async function boot(){
     draw();
   }catch(e){
     if(String(e.message).indexOf('signed out')>=0){ renderAuth(); }
-    else { toast(e.message); renderAuth(); }
+    else {
+      /* A network blip here isn't a reason to sign the user out of the UI —
+         keep the chrome up and pick the load back up once we're online. */
+      toast(navigator.onLine===false ? 'Offline — reconnect to load your data.' : e.message);
+      window.addEventListener('online', boot, {once:true});
+    }
   }
   busy(false);
 }
