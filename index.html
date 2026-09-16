@@ -797,6 +797,41 @@ function renderManageView(){
         el('div',{class:'tally'},
           (x.kind==='binary'?'yes/no':(x.kind==='floor'?'\u2265':'\u2264')+x.target)+' \u00B7 '+x.period))))));
 
+  /* One JSON file with everything this account owns — entry types, every
+     daily log (resolved to the entry's slug, not its opaque id, so the file
+     reads on its own), and weekly reflections. Logs/reflections aren't
+     limited to what S has cached for the currently-viewed months; this
+     fetches the full history fresh. RLS already scopes every query to the
+     signed-in user, so no explicit filtering needed here. */
+  const expMsg=el('p',{class:'msg'});
+  async function runExport(){
+    expMsg.className='msg'; expMsg.textContent='Preparing export…';
+    try{
+      const [logs, refl] = await Promise.all([
+        api('logs?select=entry_type_id,date,count,note'),
+        api('reflections?select=week_start,score,note')
+      ]);
+      const slugFor={}; S.types.forEach(x=>{ slugFor[x.id]=x.slug; });
+      const data={
+        exported_at: new Date().toISOString(),
+        app: 'ledger',
+        entry_types: S.types.map(x=>({slug:x.slug, name:x.name, kind:x.kind, period:x.period, target:x.target, icon:x.icon||null, active:x.active, sort:x.sort})),
+        logs: logs.map(r=>({entry_type_slug: slugFor[r.entry_type_id]||null, date:r.date, count:r.count, note:r.note||null})),
+        reflections: refl
+      };
+      const blob=new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+      const url=URL.createObjectURL(blob);
+      const a=el('a',{href:url, download:'ledger-export-'+key(todayD())+'.json'});
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      expMsg.textContent='Downloaded '+logs.length+' logs, '+refl.length+' weekly reflections.';
+    }catch(e){ expMsg.textContent=e.message; expMsg.className='msg err'; }
+  }
+  out.push(el('section',null,
+    el('div',{class:'head'},el('h2',null,'Export your data')),
+    el('p',{class:'mut'},'Everything you’ve logged — entries, daily counts, notes, and weekly reflections — as one file you can keep.'),
+    el('div',{class:'btnrow'}, el('button',{onclick:runExport},'Download my data')), expMsg));
+
   const impT=el('textarea',{placeholder:'Paste the JSON export from the old tracker'});
   const impMsg=el('p',{class:'msg'});
   async function runImport(){
