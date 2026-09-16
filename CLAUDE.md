@@ -17,7 +17,7 @@ Logs are stored as raw daily counts, never as scored results, so changing a targ
 
 ## Deployment & environments
 
-Deployed as static files from `main` at the repo root via GitHub Pages → `costgal.github.io/ledger/`. A second host serves the same files for the beta. The app picks its Supabase backend at runtime by hostname, at the top of the `<script>` block:
+Deployed as static files from `main` at the repo root via GitHub Pages → `costgal.github.io/ledger/`. A second host serves the same files for the beta from a **separate repo**, `ledger-beta` — the two repos carry the same `index.html` (kept in sync by hand, not by a shared build) and each deploys independently. The app picks its Supabase backend at runtime by hostname, at the top of the `<script>` block:
 
 - `costgal.github.io/ledger/` → **sandbox** project (Kostas's personal data)
 - any other host (beta domain, localhost) → **beta** project (friends)
@@ -26,6 +26,8 @@ Because the same files are served both under a `/ledger/` path prefix and at a h
 
 Both Supabase keys embedded in the file are publishable. The real access control is server-side: every table is RLS-scoped to `user_id`, and beta signup is gated by an `allowed_emails` table plus a trigger on `auth.users`. That trigger is what produces the `not_invited` / `Database error saving new user` responses which `renderAuth` rewrites into "That email is not on the beta list." Sessions are stored in `localStorage` under a key namespaced per environment (`ledger_session_sandbox` / `ledger_session_beta`) so signing into one doesn't clobber the other.
 
+Auth emails (signup confirmation, password reset) are sent by Supabase but routed through a custom SMTP provider — Resend, sending from `notify.socialhue.gr` — configured per-project in each Supabase project's Auth → SMTP settings. That configuration lives in the Supabase dashboard, not in this repo, so there's nothing in `index.html` to keep in sync with it; if sender domain or provider changes, update it in both the sandbox and beta Supabase projects.
+
 Both projects carry the identical schema: `entry_types`, `logs`, `reflections`.
 
 ## Design invariants — do not redesign
@@ -33,7 +35,7 @@ Both projects carry the identical schema: `entry_types`, `logs`, `reflections`.
 The visual design is settled and deliberate. Keep it:
 
 - Black background; `#D97757` as the only accent
-- `#E5484D` (red) is reserved **strictly** for a ceiling that has been exceeded — never for generic errors, warnings, or emphasis
+- `#E5484D` (red) is reserved for a ceiling that has been exceeded, with exactly one other sanctioned use: the small dot inside the `.unsaved` badge marking a chip/toggle whose write hasn't saved yet. The badge itself is off-white (`var(--ink)`), not red, so it never reads as a ceiling warning. No other error/warning/emphasis use of red — that still goes through `toast()` instead.
 - Futura stack throughout (`--fut`)
 - iOS-first; minimum 44pt tap targets; `env(safe-area-inset-*)` respected on all four edges
 
