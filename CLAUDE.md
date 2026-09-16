@@ -76,3 +76,16 @@ Node built-ins only; it never runs at build or serve time. Geometry is expressed
 - No bundler, no module system — new code goes into the existing single `<script>` block, in the same style (plain functions, `el()`-built DOM, no external libraries).
 - `kind` and `period` are the two axes driving almost all conditional logic across the Day/Week/Month views (`periodRange`, `periodTot`, `isCeil`, `weekTarget`/`weekTot`, `mTarget`). When adding a feature that touches entry types, check all three views, not just one.
 - Network failures from `setLog`/`setRefl` are surfaced via the `toast()` helper rather than thrown, since these are fire-and-forget saves from UI interactions.
+
+## Working with Kostas — task workflow
+
+Kostas isn't a developer, so this repo's process leans on plain language, not just working code:
+
+- **Before starting** a queued or in-progress item, give a short rundown in plain, non-developer language: what it is, why it matters, what it touches. No jargon, no code in the explanation.
+- **After finishing**, give a plain-language rundown of what actually happened — including anything that ended up different from the plan (a feature that turned out to already exist, an edge case that changed scope, etc.).
+- **Bugs hit along the way**: try to fix them in the same pass rather than just flagging them and moving on.
+- **Structural or architectural problems** (something that doesn't fit cleanly — e.g. two features wanting the same UI space, a pattern that doesn't extend the way it looks like it should): explain the problem in plain language, lay out the realistic options, give a recommendation — but the decision is Kostas's, not something to resolve unilaterally.
+- **New work discovered while doing something else**:
+  - Small and mechanical (a typo, a missing null-check, a doc that's gone stale) → just open a GitHub issue for it. No discussion needed.
+  - Anything bigger, or anything touching the product's direction → stop and discuss first. Present the options and trade-offs, and where it helps, how comparable apps (Notion, Streaks, Habitica, etc.) handle the same problem.
+- **Kostas's own feature ideas** always get discussed first — implementation approach, what could break, scope — before any code gets written. He's the one who decides what Ledger becomes; this file and this workflow exist to make that easy for him to do without needing to read the code himself.
