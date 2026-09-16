@@ -13,7 +13,6 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 
 ## Queued
 
-- [ ] [claude] Password-reset edge case: `recoveryFromHash()` only reads `location.hash` (Supabase's default implicit-flow shape, `#type=recovery&access_token=...`). If either Supabase project's Auth flow type is set to PKCE instead, the recovery link comes back as a `?code=...` query param and the set-password screen would never trigger. Worth confirming which flow type is configured before calling this fully closed — if it's implicit on both, nothing to do here. (#5)
 - [ ] [claude] Auth screen: remember the last-used email across visits, and stop `boot()` from resetting `S.view`/`S.date` back to Day/today on every re-auth (including the forced one after a refresh-token failure) so a signed-out-and-back-in user doesn't lose their place. Note: the autocomplete attributes themselves (`username` / `current-password` / `new-password`) are already correct on all three fields — that part doesn't need work. (#6)
 - [ ] [claude] Failed-write visibility: `pushWrite` already toasts `"Not saved — …"` on failure and auto-retries once `online` fires again, so it isn't fully silent today. What's missing is a *persistent* per-item indicator — right now once the 4s toast fades, a chip that failed to save looks identical to one that succeeded. `W[key].failed` is already tracked and could drive that. (#7)
 - [ ] [kostas] Run the Resend→Supabase integration on `ledger-beta`; confirm SMTP settings are populated in that project's dashboard the same way as sandbox's. (#8)
@@ -30,6 +29,7 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 
 ## Done
 
+- [x] [claude] Password-reset PKCE edge case — checked (#5, closed not-planned) and confirmed it isn't real: Supabase's default recovery email uses `{{ .ConfirmationURL }}`, which resolves server-side and redirects back with the session in the hash fragment (what `recoveryFromHash()` already handles). PKCE requires the *client* to generate a code_challenge at request time; this app's `recover()` call never does that, so PKCE can't be in play here regardless of any dashboard setting. No code change needed.
 - [x] [claude] Mirrored every In progress / Queued item above as a GitHub issue in this repo (#3–#18) and noted the sync convention at the top of this file.
 - [x] [claude] `ledger-beta/index.html` had CRLF line endings while this file has LF (from an earlier "Add files via upload") — resolved when `ledger`'s `index.html` was promoted into `ledger-beta`, which carried the LF endings over.
 - [x] [claude] Verified this list against the actual code before seeding it (see corrections below) and reviewed/corrected `CLAUDE.md` — documented that beta lives in a separate repo (`ledger-beta`) kept in sync by hand, and added the Resend/`notify.socialhue.gr` auth-email SMTP setup.
