@@ -1,6 +1,6 @@
 # Tasks
 
-**Beta build:** `ledger`'s `main` now has per-entry notes (#11), undo for mis-taps (#12), and data export (#13) merged, on top of the earlier password reset / icon / emoji-icon / unsaved-write-badge baseline. Not yet promoted to `ledger-beta` — that repo is still on the earlier baseline until this gets copied over. If friends report a build missing notes/undo/export, that's expected until it promotes — not a bug.
+**Beta build:** both repos' `main` are in sync as of the last merge — per-entry notes, undo for mis-taps, data export, plus the earlier password reset / icon / emoji-icon / unsaved-write-badge baseline. Both live once GitHub Pages redeploys (usually a minute or two after a merge).
 
 **GitHub issues:** every In progress / Queued item below is mirrored as an issue in this repo (`CostGal/ledger`), tagged `[kostas]` or `[claude]` in its title to match. Issue number is noted in parens after each item. When ticking an item here, close the matching issue in the same pass (and vice versa) — this list and the issue tracker are meant to stay in sync, not duplicate independently.
 
