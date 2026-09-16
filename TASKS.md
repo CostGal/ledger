@@ -1,6 +1,6 @@
 # Tasks
 
-**Beta build:** both repos' `main` were in sync as of the last merge (password reset, icon/manifest fixes, emoji icons, unsaved-write badge). This repo now has per-entry notes (#11) on top of that, on branch `claude/per-entry-notes` (PR #20), not yet merged or promoted to `ledger-beta`. If friends report a build missing notes, that's expected until this promotes — not a bug.
+**Beta build:** both repos' `main` were in sync as of the last merge (password reset, icon/manifest fixes, emoji icons, unsaved-write badge). This repo now has two more features on top of that, not yet merged or promoted to `ledger-beta`: per-entry notes (#11, PR #20) and undo for mis-taps (#12, PR #21, stacked on #20 — merge #20 first). If friends report a build missing either, that's expected until these promote — not a bug.
 
 **GitHub issues:** every In progress / Queued item below is mirrored as an issue in this repo (`CostGal/ledger`), tagged `[kostas]` or `[claude]` in its title to match. Issue number is noted in parens after each item. When ticking an item here, close the matching issue in the same pass (and vice versa) — this list and the issue tracker are meant to stay in sync, not duplicate independently.
 
@@ -16,7 +16,6 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 - [ ] [kostas] Run the Resend→Supabase integration on `ledger-beta`; confirm SMTP settings are populated in that project's dashboard the same way as sandbox's. (#8)
 - [ ] [kostas] Save the weekly CSV export query in both Supabase projects. (#9)
 - [ ] [kostas] Supabase webhook on new signup → Make → notification. (#10)
-- [ ] [claude] Undo for mis-taps. (#12)
 - [ ] [claude] Per-user data export from within the app. (#13)
 - [ ] [claude] Week review screen: ceilings crossed vs. floors missed, patterns across weeks. Present as observations, never as causal claims. (The current Week view is single-week status only — `renderWeekView` has no cross-week comparison yet.) (#14)
 - [ ] [claude] Yearly heatmap view. (#15)
@@ -26,6 +25,7 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 
 ## Done
 
+- [x] [claude] Undo for mis-taps: a tap on a counter chip (+1 or minus) or a binary toggle shows a neutral undo toast (a new `#undo` element, deliberately not the red-styled `#toast` used for errors) with an Undo button that reverts just that tap. Only the most recent tap is undoable. Previewed with a mocked screenshot before pushing (confirmed both counter and toggle revert correctly). On branch `claude/undo-mistaps`, PR #21, stacked on #20 — not yet merged or promoted to beta. (#12, closed)
 - [x] [claude] Per-entry notes on a log: a pencil button on each chip/toggle opens a free-text note for that entry on the viewed date, in a section below the chips (not inline in the flex-wrap row). Pencil turns accent-colored once a note exists. New `S.logNotes` cache alongside `S.logs` — `cnt()`/`sumRange()`/`periodTot()` untouched. New nullable `note` column on `logs` in both Supabase projects. Previewed with a mocked screenshot before pushing. On branch `claude/per-entry-notes`, PR #20 — not yet merged or promoted to beta. (#11, closed)
 - [x] [claude] Per-entry emoji icon: optional icon field on entry types, shown to the right of the name everywhere (Day chips/toggles, Week/Month rows, Manage list and edit form) — never inside the name field itself. Presets on the six seeded placeholders (💪 Exercise, 🏃 Run, 📖 Read, 😴 Slept 7h+, 🥡 Takeout, 🌙 Late night). Picking is a plain text input using the OS emoji keyboard, no custom widget. New nullable `icon` column added to `entry_types` on both Supabase projects — confirmed no existing rows affected (25 beta / 12 sandbox entries, all intact). Previewed with a mocked screenshot before pushing, which caught a real crash bug in the #7 change below (fixed in the same commit). (#19, closed)
 - [x] [claude] Failed-write visibility: chips/toggles now show a persistent off-white badge with a red dot while their last write is still failed, clearing once it retries successfully (on the next tap, or after an `online` reconnect). Deliberate, narrow exception to "red = exceeded ceiling only" — Kostas's explicit choice, documented in `CLAUDE.md`. (#7, closed)

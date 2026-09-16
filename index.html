@@ -180,6 +180,13 @@
   #toast{position:fixed; left:16px; right:16px; bottom:calc(env(safe-area-inset-bottom) + 84px); z-index:20;
     background:var(--bad-soft); border:1px solid var(--bad); color:var(--ink); border-radius:11px;
     padding:12px 14px; font-size:14px; display:none}
+  /* Neutral, not the red error toast — confirms a tap landed and offers to
+     undo it. Same position; toast() and showUndo() hide each other so they
+     never overlap. */
+  #undo{position:fixed; left:16px; right:16px; bottom:calc(env(safe-area-inset-bottom) + 84px); z-index:20;
+    background:var(--card2); border:1px solid var(--rule); color:var(--ink); border-radius:11px;
+    padding:10px 14px; font-size:14px; display:none; align-items:center; justify-content:space-between; gap:10px}
+  #undo button{flex:none; color:var(--acc); background:none; border:0; padding:4px 0; font-size:14px; font-weight:600; min-height:auto}
   /* Content is never blanked while loading, so this thin bar is the only cue
      that a fetch is in flight. Fixed, so it costs no layout. */
   #load{position:fixed; left:0; top:0; height:2px; width:100%; z-index:30;
@@ -192,6 +199,7 @@
 <div id="app"></div>
 <div id="load"></div>
 <div id="toast"></div>
+<div id="undo"></div>
 
 <script>
 /* Which backend this deploy talks to is decided by the hostname.
@@ -235,8 +243,25 @@ function monthStart(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
 function monthEnd(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
 function sameDay(a,b){ return key(a)===key(b); }
 function todayD(){ const t=new Date(); t.setHours(0,0,0,0); return t; }
-function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block';
-  clearTimeout(toast._x); toast._x=setTimeout(()=>t.style.display='none', 4000); }
+function toast(m){
+  hideUndo();
+  const t=document.getElementById('toast'); t.textContent=m; t.style.display='block';
+  clearTimeout(toast._x); toast._x=setTimeout(()=>t.style.display='none', 4000);
+}
+let undoTimer=null;
+function hideUndo(){ clearTimeout(undoTimer); document.getElementById('undo').style.display='none'; }
+/* A brief, dismissable offer to reverse the tap that just landed — for
+   mis-taps (wrong entry, one too many). Only the most recent tap is
+   undoable; a new one replaces the offer rather than stacking. */
+function showUndo(label, fn){
+  const t=document.getElementById('toast'); t.style.display='none'; clearTimeout(toast._x);
+  const u=document.getElementById('undo');
+  u.innerHTML='';
+  u.appendChild(el('span',null,label));
+  u.appendChild(el('button',{onclick:()=>{ hideUndo(); fn(); }},'Undo'));
+  u.style.display='flex';
+  clearTimeout(undoTimer); undoTimer=setTimeout(hideUndo, 5000);
+}
 let busyN=0;
 function busy(on){ busyN=Math.max(0, busyN+(on?1:-1));
   document.getElementById('load').classList.toggle('on', busyN>0); }
@@ -521,7 +546,11 @@ function renderDayView(){
     const tot=periodTot(b,d);
     /* noteBtn is a sibling, not nested inside .tog \u2014 .tog is itself a
        button, and a button can't contain another interactive button. */
-    const btn=el('button',{class:'tog','aria-pressed':String(on), onclick:()=>{ setLog(b.id,dk,on?0:1).then(redraw); redraw(); }},
+    const btn=el('button',{class:'tog','aria-pressed':String(on), onclick:()=>{
+      const prev=on?1:0;
+      setLog(b.id,dk,on?0:1).then(redraw); redraw();
+      showUndo(b.name+(on?' — off':' — on'), ()=>{ setLog(b.id,dk,prev).then(redraw); redraw(); });
+    }},
       el('span',{class:'box'},'\u2713'), b.name,
       b.icon?el('span',{class:'icon'},b.icon):null,
       el('span',{class:'sub'}, tot+'/'+b.target+' '+periodLabel(b.period)),
@@ -534,8 +563,15 @@ function renderDayView(){
     const over=isCeil(x)&&tot>T, met=!isCeil(x)&&tot>=T;
     const c=el('div',{class:'chip'+(over?' over':'')+(met?' met':'')});
     if(n>0) c.appendChild(el('button',{class:'minus','aria-label':'Remove one '+x.name,
-      onclick:e=>{ e.stopPropagation(); setLog(x.id,dk,Math.max(0,n-1)).then(redraw); redraw(); }},'\u2013'));
-    c.appendChild(el('button',{class:'lbl', onclick:()=>{ setLog(x.id,dk,n+1).then(redraw); redraw(); }},
+      onclick:e=>{
+        e.stopPropagation();
+        setLog(x.id,dk,Math.max(0,n-1)).then(redraw); redraw();
+        showUndo(x.name+' \u2014 1 removed', ()=>{ setLog(x.id,dk,n).then(redraw); redraw(); });
+      }},'\u2013'));
+    c.appendChild(el('button',{class:'lbl', onclick:()=>{
+      setLog(x.id,dk,n+1).then(redraw); redraw();
+      showUndo(x.name+' +1', ()=>{ setLog(x.id,dk,n).then(redraw); redraw(); });
+    }},
       el('span',{class:'txt'}, el('span',null, x.name, x.icon?el('span',{class:'icon'},x.icon):null),
         el('span',{class:'prog'}, tot+'/'+T+' '+periodLabel(x.period)+(isCeil(x)?' max':''))),
       n>0?el('span',{class:'n'},String(n)):null));
