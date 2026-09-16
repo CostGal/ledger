@@ -183,6 +183,7 @@ const SB_URL=ENVS[ENV_NAME].url;
 const SB_KEY=ENVS[ENV_NAME].key;
 /* Sessions are keyed per environment so signing into one doesn't clobber the other. */
 const SESS_KEY='ledger_session_'+ENV_NAME;
+const LAST_EMAIL_KEY='ledger_last_email_'+ENV_NAME;
 
 /* ---------- utils ---------- */
 const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -713,7 +714,9 @@ function renderManageView(){
 function renderAuth(){
   app.innerHTML='';
   let forgot=false;
-  const email=el('input',{type:'email', placeholder:'Email', autocomplete:'username'});
+  const email=el('input',{type:'email', placeholder:'Email', autocomplete:'username',
+    oninput:e=>localStorage.setItem(LAST_EMAIL_KEY, e.target.value)});
+  email.value=localStorage.getItem(LAST_EMAIL_KEY)||'';
   const pw=el('input',{type:'password', placeholder:'Password', autocomplete:'current-password'});
   const msg=el('p',{class:'msg'});
   async function go(signup){
@@ -822,7 +825,6 @@ function render(){
 async function boot(){
   if(S.recovery){ renderResetPassword(S.recovery); return; }
   if(!sess()){ renderAuth(); return; }
-  S.view='day'; S.date=todayD();
   draw();                       // app chrome on the first frame, not a blank page
   busy(true);
   try{
