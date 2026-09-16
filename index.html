@@ -103,7 +103,8 @@
 
   .row{display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid var(--rule)}
   .row:last-child{border-bottom:0}
-  .row .name{flex:1; font-size:16px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .row .name{flex:1; display:flex; align-items:center; font-size:16px; min-width:0}
+  .row .name .nametext{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0}
   .row.tap{cursor:pointer}
   .dots{display:flex; gap:5px; flex:none}
   .dots i{width:7px; height:7px; border-radius:2px; background:#2E2E2B}
@@ -132,6 +133,14 @@
 
   .form{display:flex; flex-direction:column; gap:12px; padding:16px; background:var(--card); border:1px solid var(--rule); border-radius:12px; margin-bottom:16px}
   .form label{font-size:12.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink2); display:flex; flex-direction:column; gap:6px}
+  .formrow{display:flex; gap:10px}
+  .formrow .grow{flex:1; min-width:0}
+  .formrow .iconfield{flex:none; width:72px}
+  .formrow .iconfield input{text-align:center; font-size:20px}
+  /* Emoji marker next to an entry's name — sits to the right of the name,
+     never in the name field itself. Emoji carry their own color regardless
+     of font, so this doesn't add a new color literal to the palette. */
+  .icon{margin-left:6px; flex:none}
   .btnrow{display:flex; gap:8px}
   .btnrow button{flex:1; min-height:50px; font-size:15px; background:var(--card2); border:1px solid var(--rule); border-radius:11px}
   .btnrow button.pri{background:var(--acc); border-color:var(--acc); color:#100E0D}
@@ -397,14 +406,14 @@ function setRefl(wk, patch){
 
 /* ---------- seed ---------- */
 const SEED=[
-  ['exercise','Exercise','floor','week',3], ['run','Run','floor','week',1],
-  ['read','Read','binary','week',5], ['sleep','Slept 7h+','binary','week',7],
-  ['takeout','Takeout','ceiling','week',2], ['latenight','Late night','ceiling','week',2],
+  ['exercise','Exercise','floor','week',3,'\u{1F4AA}'], ['run','Run','floor','week',1,'\u{1F3C3}'],
+  ['read','Read','binary','week',5,'\u{1F4D6}'], ['sleep','Slept 7h+','binary','week',7,'\u{1F634}'],
+  ['takeout','Takeout','ceiling','week',2,'\u{1F961}'], ['latenight','Late night','ceiling','week',2,'\u{1F319}'],
 ];
 async function seedIfEmpty(){
   if(S.types.length) return false;
   await api('entry_types',{method:'POST', headers:{Prefer:'return=minimal'},
-    body:SEED.map((s,i)=>({slug:s[0], name:s[1], kind:s[2], period:s[3], target:s[4], sort:i}))});
+    body:SEED.map((s,i)=>({slug:s[0], name:s[1], kind:s[2], period:s[3], target:s[4], icon:s[5]||null, sort:i}))});
   await loadTypes();
   return true;
 }
@@ -477,6 +486,7 @@ function renderDayView(){
     const tot=periodTot(b,d);
     return el('button',{class:'tog','aria-pressed':String(on), onclick:()=>{ setLog(b.id,dk,on?0:1).then(redraw); redraw(); }},
       el('span',{class:'box'},'\u2713'), b.name,
+      b.icon?el('span',{class:'icon'},b.icon):null,
       el('span',{class:'sub'}, tot+'/'+b.target+' '+periodLabel(b.period)),
       unsavedBadge('log:'+b.id+':'+dk));
   })));
@@ -488,10 +498,11 @@ function renderDayView(){
     if(n>0) c.appendChild(el('button',{class:'minus','aria-label':'Remove one '+x.name,
       onclick:e=>{ e.stopPropagation(); setLog(x.id,dk,Math.max(0,n-1)).then(redraw); redraw(); }},'\u2013'));
     c.appendChild(el('button',{class:'lbl', onclick:()=>{ setLog(x.id,dk,n+1).then(redraw); redraw(); }},
-      el('span',{class:'txt'}, el('span',null,x.name),
+      el('span',{class:'txt'}, el('span',null, x.name, x.icon?el('span',{class:'icon'},x.icon):null),
         el('span',{class:'prog'}, tot+'/'+T+' '+periodLabel(x.period)+(isCeil(x)?' max':''))),
       n>0?el('span',{class:'n'},String(n)):null));
-    c.appendChild(unsavedBadge('log:'+x.id+':'+dk));
+    const badge=unsavedBadge('log:'+x.id+':'+dk);
+    if(badge) c.appendChild(badge);
     return c;
   }
   const chipFor=x=>live(redraw=>chip(x, redraw));
@@ -542,7 +553,7 @@ function renderWeekView(refl){
       const tal=ceil
         ? el('div',{class:'tally'+(T-tot<0?' over':'')}, T-tot<0?(tot-T)+' over':(T-tot)+' left')
         : el('div',{class:'tally'+(tot>=T?' met':'')}, tot+' / '+T);
-      return el('div',{class:'row'}, el('div',{class:'name'},x.name), dots, tal);
+      return el('div',{class:'row'}, el('div',{class:'name'}, el('span',{class:'nametext'},x.name), x.icon?el('span',{class:'icon'},x.icon):null), dots, tal);
     }));
   }
 
@@ -611,7 +622,7 @@ function renderMonthView(){
         ? el('div',{class:'tally'+(ov?' over':'')}, ov?(tot-T)+' over':tot+' / '+approx+T+' max')
         : el('div',{class:'tally'+(tot>=T?' met':'')}, tot+' / '+approx+T);
       const r=el('div',{class:'row tap', onclick:()=>{ expanded=expanded===x.id?null:x.id; render(); }},
-        el('div',{class:'name'}, x.name), tal);
+        el('div',{class:'name'}, el('span',{class:'nametext'},x.name), x.icon?el('span',{class:'icon'},x.icon):null), tal);
       return el('div',null, r, expanded===x.id?heat(x):null);
     }));
   }
@@ -634,8 +645,9 @@ function renderManageView(){
   }
 
   if(S.editingId){
-    const ed=S.editingId==='new'?{name:'',kind:'floor',period:'week',target:1,active:true}:S.types.find(x=>x.id===S.editingId);
+    const ed=S.editingId==='new'?{name:'',kind:'floor',period:'week',target:1,active:true,icon:''}:S.types.find(x=>x.id===S.editingId);
     const nameI=el('input',{type:'text', value:ed.name, placeholder:'Name'});
+    const iconI=el('input',{type:'text', value:ed.icon||'', placeholder:'\u{1F60A}', maxlength:'8'});
     const kindS=el('select',null,
       el('option',{value:'floor'},'Counter \u2014 at least N per period'),
       el('option',{value:'ceiling'},'Budget \u2014 at most N per period'),
@@ -651,7 +663,7 @@ function renderManageView(){
     async function saveType(){
       const name=nameI.value.trim();
       if(!name){ msg.textContent='Name required.'; msg.className='msg err'; return; }
-      const body={name:name, kind:kindS.value, period:perS.value, target:Math.max(0,+tgtI.value||0)};
+      const body={name:name, kind:kindS.value, period:perS.value, target:Math.max(0,+tgtI.value||0), icon:iconI.value.trim()||null};
       try{
         if(S.editingId==='new'){
           body.slug=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||('e'+Date.now());
@@ -669,7 +681,9 @@ function renderManageView(){
       }catch(e){ msg.textContent=e.message; msg.className='msg err'; }
     }
     out.push(el('div',{class:'form'},
-      el('label',null,'Name', nameI),
+      el('div',{class:'formrow'},
+        el('label',{class:'grow'},'Name', nameI),
+        el('label',{class:'iconfield'},'Icon', iconI)),
       el('label',null,'Type', kindS),
       el('label',null,'Period', perS),
       el('label',null,'Target', tgtI),
@@ -689,7 +703,7 @@ function renderManageView(){
         S.showArchived?'Show active':'Show archived')),
     el('div',null, list.map(x=>
       el('div',{class:'row tap', onclick:()=>{ S.editingId=x.id; render(); window.scrollTo(0,0); }},
-        el('div',{class:'name'}, x.name),
+        el('div',{class:'name'}, el('span',{class:'nametext'},x.name), x.icon?el('span',{class:'icon'},x.icon):null),
         el('div',{class:'tally'},
           (x.kind==='binary'?'yes/no':(x.kind==='floor'?'\u2265':'\u2264')+x.target)+' \u00B7 '+x.period))))));
 
