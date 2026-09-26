@@ -1,6 +1,6 @@
 # Tasks
 
-**Beta build:** both repos' `main` are in sync as of the last merge — per-entry notes, undo for mis-taps, data export, plus the earlier password reset / icon / emoji-icon / unsaved-write-badge baseline. Both live once GitHub Pages redeploys (usually a minute or two after a merge).
+**Beta build:** `ledger-beta` is one merge behind — the entry detail page (PR #26) is on `ledger` only until promoted (#27). Before that, both repos' `main` were in sync — per-entry notes, undo for mis-taps, data export, plus the earlier password reset / icon / emoji-icon / unsaved-write-badge baseline. Both live once GitHub Pages redeploys (usually a minute or two after a merge).
 
 **GitHub issues:** every In progress / Queued item below is mirrored as an issue in this repo (`CostGal/ledger`), tagged `[kostas]` or `[claude]` in its title to match. Issue number is noted in parens after each item. When ticking an item here, close the matching issue in the same pass (and vice versa) — this list and the issue tracker are meant to stay in sync, not duplicate independently.
 
@@ -13,6 +13,7 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 
 ## Queued
 
+- [ ] [claude] Promote PR #26 (entry detail page, `tools/make-icons.mjs`) to `ledger-beta` — waiting on Kostas's go-ahead. (#27)
 - [ ] [kostas] Run the Resend→Supabase integration on `ledger-beta`; confirm SMTP settings are populated in that project's dashboard the same way as sandbox's. (#8)
 - [ ] [kostas] Save the weekly CSV export query in both Supabase projects. (#9)
 - [ ] [kostas] Supabase webhook on new signup → Make → notification. (#10)
