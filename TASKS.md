@@ -16,12 +16,11 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 - [ ] [kostas] Run the Resend→Supabase integration on `ledger-beta`; confirm SMTP settings are populated in that project's dashboard the same way as sandbox's. (#8)
 - [ ] [kostas] Save the weekly CSV export query in both Supabase projects. (#9)
 - [ ] [kostas] Supabase webhook on new signup → Make → notification. (#10)
-- [ ] [claude] Yearly heatmap view. (#15)
-- [ ] [claude] Day-of-week breakdown per entry. (#16)
 - [ ] [kostas] Confirm the Resend/`notify.socialhue.gr` SMTP config is set the same way in both the sandbox and beta Supabase projects (dashboard-only, not tracked in either repo — see `CLAUDE.md`). (#18)
 
 ## Done
 
+- [x] [claude] Entry detail page with a yearly heatmap and a day-of-week breakdown. Placement agreed with Kostas first: inside each entry rather than a sixth tab (the tab bar is already at five). Reached by tapping a row in Week or Review, or "See its year →" in an entry's edit form; Back returns to where it was opened. Shows the last 12 months as small month calendars (pageable a year at a time), a one-line total, and per-weekday totals. Ceilings show logged days muted and only turn red when that period actually went over budget. Read-only, no schema change. Verified with a mocked Playwright preview (floor + ceiling entries, every entry point, paging, Back). (#15, #16, closed)
 - [x] [claude] Recreated `tools/make-icons.mjs` from the spec in `CLAUDE.md`. Geometry (edges, corner radii, 4× supersampling, maskable `contentScale` 0.78) was measured off the existing PNGs, and the script now regenerates all four byte-for-byte identical to what's committed — so it's a faithful source, not a redesign. (#17, closed)
 - [x] [claude] Week review screen: new "Review" tab, 4-week-at-a-time — one row per weekly entry with a heat strip (reusing Month view's accent/red convention) and a plain-stated count ("Met 3 of 4 weeks", "Over budget 2 of 4 weeks"), paginated. Design agreed with Kostas first: shape (heatmap + basic observations), window (last 4 weeks, rollback), placement (new tab), tone (direct but discreet — counts only, no advice, no causal claims). Verified with two mocked Playwright previews (data accuracy and pagination). (#14, closed)
 - [x] [claude] Per-user data export: a "Download my data" button in Manage view exports everything the account owns (entry types, logs with notes, reflections) as one JSON file, mirroring the existing importer's slug-based shape. Read-only, no schema change. Verified with a mocked Playwright preview, including inspecting the actual downloaded file contents. Merged via PR #23. (#13, closed)

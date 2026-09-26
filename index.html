@@ -142,6 +142,25 @@
   .revcells .cell.h{background:var(--acc)}
   .revcells .cell.hx{background:var(--bad)}
   .revobs{font-size:13px; color:var(--ink2)}
+  .revrow.tap{cursor:pointer}
+
+  /* Entry detail: twelve small month calendars (one cell per day, same
+     accent / muted / red convention as Week's dots) and a weekday breakdown. */
+  .yr{display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:16px 12px}
+  .yr h3{margin:0 0 6px; font-size:11.5px; font-weight:500; letter-spacing:.12em; text-transform:uppercase; color:var(--ink2)}
+  .yr .mg{display:grid; grid-template-columns:repeat(7,1fr); gap:2px}
+  .yr .mg i{aspect-ratio:1; border-radius:2px; background:#232321}
+  .yr .mg i.h{background:var(--acc)}
+  .yr .mg i.onx{background:#706C66}
+  .yr .mg i.hx{background:var(--bad)}
+  .yr .mg i.out{background:transparent}
+  .yr .mg i.fut{opacity:.35}
+  .dowrow{display:flex; align-items:center; gap:12px; padding:6px 0; font-size:14px}
+  .dowrow .l{width:36px; color:var(--ink2)}
+  .dowrow .bar{flex:1; height:10px; background:#232321; border-radius:5px; overflow:hidden}
+  .dowrow .bar i{display:block; height:100%; background:var(--acc)}
+  .dowrow .bar i.x{background:#706C66}
+  .dowrow .v{min-width:34px; text-align:right; color:var(--ink2)}
 
   .ask{font-size:17px; margin:0 0 14px; line-height:1.35}
   .scale{display:flex; gap:8px}
@@ -338,7 +357,7 @@ async function api(path, opts, retry){
 }
 
 /* ---------- data ---------- */
-const S={ view:'day', date:todayD(), types:[], logs:{}, logNotes:{}, loaded:new Set(), refl:{}, editingId:null, noteEditId:null, showArchived:false, firstRun:false, renderToken:0, recovery:recoveryFromHash() };
+const S={ view:'day', date:todayD(), types:[], logs:{}, logNotes:{}, loaded:new Set(), refl:{}, editingId:null, noteEditId:null, showArchived:false, entryId:null, entryBack:'review', entryEnd:null, firstRun:false, renderToken:0, recovery:recoveryFromHash() };
 if(S.recovery) history.replaceState(null,'',location.pathname+location.search);
 function monthKeyOf(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 async function loadTypes(){ S.types=await api('entry_types?select=*&order=sort.asc,created_at.asc'); }
@@ -523,6 +542,14 @@ function navButtons(){
       el('button',{'aria-label':'Next month', disabled:new Date(S.date.getFullYear(),S.date.getMonth()+1,1)>t, onclick:()=>{S.date=new Date(S.date.getFullYear(),S.date.getMonth()+1,1); render();}},'\u203A'),
     ];
   }
+  if(S.view==='entry'){
+    const a=S.entryEnd, prev=new Date(a.getFullYear(),a.getMonth()-12,1), next=new Date(a.getFullYear(),a.getMonth()+12,1);
+    return [
+      el('button',{class:'today', onclick:()=>{ S.view=S.entryBack; render(); }},'Back'),
+      el('button',{'aria-label':'Previous 12 months', onclick:()=>{ S.entryEnd=prev; render(); }},'\u2039'),
+      el('button',{'aria-label':'Next 12 months', disabled:next>t, onclick:()=>{ S.entryEnd=next; render(); }},'\u203A'),
+    ];
+  }
   if(S.view==='review'){
     return [
       el('button',{'aria-label':'Previous 4 weeks', onclick:()=>{S.date=addDays(mondayOf(S.date),-28); render();}},'\u2039'),
@@ -658,7 +685,7 @@ function renderWeekView(refl){
       const tal=ceil
         ? el('div',{class:'tally'+(T-tot<0?' over':'')}, T-tot<0?(tot-T)+' over':(T-tot)+' left')
         : el('div',{class:'tally'+(tot>=T?' met':'')}, tot+' / '+T);
-      return el('div',{class:'row'}, el('div',{class:'name'}, el('span',{class:'nametext'},x.name), x.icon?el('span',{class:'icon'},x.icon):null), dots, tal);
+      return el('div',{class:'row tap', onclick:()=>openEntry(x.id)}, el('div',{class:'name'}, el('span',{class:'nametext'},x.name), x.icon?el('span',{class:'icon'},x.icon):null), dots, tal);
     }));
   }
 
@@ -677,7 +704,7 @@ function renderWeekView(refl){
   note.value=refl.note||'';
 
   return [head, st, strip,
-    el('section',null, el('div',{class:'head'},el('h2',null,'Floors')), rowsFor(floors,false)),
+    el('section',null, el('div',{class:'head'},el('h2',null,'Floors'),el('span',{class:'sub'},'tap a row for its year')), rowsFor(floors,false)),
     el('section',null, el('div',{class:'head'},el('h2',null,'Ceilings'),el('span',{class:'sub'},"what's left")), rowsFor(ceils,true)),
     el('section',null, el('div',{class:'head'},el('h2',null,'Sunday'),el('span',{class:'sub'},'not scored')),
       el('p',{class:'ask'},'Were you actually present with the people who matter this week?'),
@@ -741,7 +768,7 @@ function renderMonthView(){
 /* A 4-week-at-a-time look back, one row per entry: a small heat strip (one
    cell per week, same accent/red convention Month's calendar already uses
    for "met" / "ceiling exceeded") plus a single plain-stated count below it.
-   Read-only — no taps, no editing. Reuses viewSpan()/dataReady()/render()
+   Read-only — a tap on a row opens that entry's year view, nothing else. Reuses viewSpan()/dataReady()/render()
    like every other view, so it needs no fetch logic of its own. Deliberately
    states counts only ("Met 3 of 4 weeks") — never advice, never a causal
    claim between entries. */
@@ -749,7 +776,7 @@ function renderReviewView(){
   const we=addDays(mondayOf(S.date),6), ws=addDays(we,-27);
   const head=el('div',{class:'viewhead'},
     el('h2',null, ws.getDate()+' '+MON[ws.getMonth()]+'–'+we.getDate()+' '+MON[we.getMonth()]),
-    el('span',{class:'sub'},'last 4 weeks'));
+    el('span',{class:'sub'},'last 4 weeks \u00B7 tap for the year'));
 
   const weekStarts=[0,1,2,3].map(i=>addDays(ws,i*7));
   function weekTarget(x){ return x.period==='day' ? x.target*7 : x.target; }
@@ -768,7 +795,7 @@ function renderReviewView(){
     });
     const hits=hitsFor(x);
     const obs=isCeil(x) ? ('Over budget '+hits+' of 4 weeks.') : ('Met '+hits+' of 4 weeks.');
-    return el('div',{class:'revrow'},
+    return el('div',{class:'revrow tap', onclick:()=>openEntry(x.id)},
       el('div',{class:'revname'}, x.name, x.icon?el('span',{class:'icon'},x.icon):null),
       el('div',{class:'revcells'}, cells),
       el('div',{class:'revobs'}, obs));
@@ -784,6 +811,74 @@ function renderReviewView(){
     floors.length?el('section',null, el('div',{class:'head'},el('h2',null,'Counters')), floors.map(rowFor)):null,
     ceils.length?el('section',null, el('div',{class:'head'},el('h2',null,'Budgets')), ceils.map(rowFor)):null,
   ].filter(Boolean);
+}
+
+/* ---------- entry view ---------- */
+/* One entry's last 12 months: a small calendar per month plus a weekday
+   breakdown. Not a tab — reached from a Week/Review row or the edit form, with
+   Back returning to wherever it was opened from. Keeps its own date anchor
+   (S.entryEnd) so paging through years never moves S.date under the other
+   views. Same tone as Review: counts only, no advice. */
+function openEntry(id){
+  if(S.view!=='entry') S.entryBack=S.view;
+  S.entryId=id; S.entryEnd=todayD(); S.view='entry'; render();
+}
+function entryWindow(){
+  const a=S.entryEnd;
+  return [new Date(a.getFullYear(), a.getMonth()-11, 1), monthEnd(a)];
+}
+function renderEntryView(){
+  const x=S.types.find(t=>t.id===S.entryId);
+  if(!x) return [el('p',{class:'mut'},'That entry no longer exists.')];
+  const [ws,we]=entryWindow(), t=todayD(), last=minD(we,t);
+  const head=el('div',{class:'viewhead'},
+    el('h2',null, x.name, x.icon?el('span',{class:'icon'},x.icon):null),
+    el('span',{class:'sub'}, MON[ws.getMonth()]+' '+ws.getFullYear()+' \u2013 '+MON[we.getMonth()]+' '+we.getFullYear()));
+
+  /* Ceilings: a logged day is muted, and turns red only when its period
+     actually went over budget — red stays reserved for an exceeded ceiling. */
+  function cls(dd){
+    const c=cnt(x.id,key(dd));
+    if(!c) return '';
+    if(!isCeil(x)) return 'h';
+    return periodTot(x,dd)>x.target?'hx':'onx';
+  }
+  const months=[];
+  for(let i=0;i<12;i++){
+    const m=new Date(ws.getFullYear(), ws.getMonth()+i, 1), dim=monthEnd(m).getDate();
+    const g=el('div',{class:'mg'});
+    for(let j=0;j<(m.getDay()+6)%7;j++) g.appendChild(el('i',{class:'out'}));
+    for(let day=1;day<=dim;day++){
+      const dd=new Date(m.getFullYear(), m.getMonth(), day);
+      g.appendChild(el('i',{class:(dd>t?'fut ':'')+cls(dd)}));
+    }
+    months.push(el('div',null, el('h3',null, MON[m.getMonth()]+(m.getMonth()===0||i===0?' '+String(m.getFullYear()).slice(2):'')), g));
+  }
+
+  let days=0, total=0;
+  const byDow=[0,0,0,0,0,0,0];
+  for(let dd=new Date(ws); dd<=last; dd=addDays(dd,1)){
+    const c=cnt(x.id,key(dd));
+    if(c>0){ days++; total+=c; byDow[(dd.getDay()+6)%7]+=c; }
+  }
+  const max=Math.max(1, ...byDow);
+  const dow=el('div',null, DAYS.map((D,i)=>el('div',{class:'dowrow'},
+    el('span',{class:'l'}, D.slice(0,3)),
+    el('div',{class:'bar'}, el('i',{class:isCeil(x)?'x':'', style:'width:'+Math.round(byDow[i]/max*100)+'%'})),
+    el('span',{class:'v'}, String(byDow[i])))));
+
+  const summary = x.kind==='binary' ? 'Done on <b>'+days+'</b> days.'
+    : 'Logged <b>'+total+'</b> time'+(total===1?'':'s')+' across <b>'+days+'</b> day'+(days===1?'':'s')+'.';
+
+  return [head,
+    el('p',{class:'status', html:summary}),
+    el('section',null, el('div',{class:'head'}, el('h2',null,'Year'),
+        el('span',{class:'sub'}, isCeil(x)?'red = '+(x.period==='day'?'day':x.period)+' over budget':'')),
+      el('div',{class:'yr'}, months)),
+    el('section',null, el('div',{class:'head'}, el('h2',null,'By weekday'),
+        el('span',{class:'sub'}, x.kind==='binary'?'days done':'total logged')), dow),
+    el('div',{class:'btnrow'}, el('button',{onclick:()=>{ S.view='manage'; S.editingId=x.id; render(); }},'Edit entry')),
+  ];
 }
 
 /* ---------- manage view ---------- */
@@ -845,6 +940,7 @@ function renderManageView(){
         el('button',{class:'pri', onclick:saveType},'Save'),
         el('button',{onclick:()=>{ S.editingId=null; render(); }},'Cancel'),
         S.editingId!=='new' ? el('button',{class:'danger', onclick:()=>archiveType(!ed.active)}, ed.active?'Archive':'Restore') : null),
+      S.editingId!=='new' ? el('button',{class:'headbtn', style:'align-self:flex-start; padding-left:0', onclick:()=>{ S.editingId=null; openEntry(ed.id); }},'See its year \u2192') : null,
       el('p',{class:'mut'},'Archiving hides an entry from logging but keeps all its history. Changing the type or target re-scores past periods too \u2014 history is stored as raw counts.'),
       msg));
   }
@@ -1016,6 +1112,7 @@ function viewSpan(){
   if(S.view==='week'){ const ws=mondayOf(d); return [ws, addDays(ws,6)]; }
   if(S.view==='month') return [monthStart(d), monthEnd(d)];
   if(S.view==='review'){ const we=addDays(mondayOf(d),6); return [addDays(we,-27), we]; }
+  if(S.view==='entry') return entryWindow();
   return [minD(monthStart(d), mondayOf(d)), maxD(monthEnd(d), addDays(mondayOf(d),6))];
 }
 function minD(a,b){ return a<b?a:b; }
@@ -1032,6 +1129,7 @@ function draw(){
     shell(renderWeekView(S.refl[wk] || {week_start:wk, score:0, note:''})); }
   else if(S.view==='month') shell(renderMonthView());
   else if(S.view==='review') shell(renderReviewView());
+  else if(S.view==='entry') shell(renderEntryView());
   else shell(renderManageView());
 }
 /* Draws straight away when the data is already cached \u2014 same task as the tap,
