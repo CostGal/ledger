@@ -18,11 +18,11 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 - [ ] [kostas] Supabase webhook on new signup → Make → notification. (#10)
 - [ ] [claude] Yearly heatmap view. (#15)
 - [ ] [claude] Day-of-week breakdown per entry. (#16)
-- [ ] [claude] `CLAUDE.md` documents `tools/make-icons.mjs` as the way to regenerate the four icon PNGs, but that script isn't present in this repo (or `ledger-beta`) — either recreate it from the documented spec (512-unit grid, per-target `contentScale`, opaque PNGs) or fix the doc if it's meant to live elsewhere. (#17)
 - [ ] [kostas] Confirm the Resend/`notify.socialhue.gr` SMTP config is set the same way in both the sandbox and beta Supabase projects (dashboard-only, not tracked in either repo — see `CLAUDE.md`). (#18)
 
 ## Done
 
+- [x] [claude] Recreated `tools/make-icons.mjs` from the spec in `CLAUDE.md`. Geometry (edges, corner radii, 4× supersampling, maskable `contentScale` 0.78) was measured off the existing PNGs, and the script now regenerates all four byte-for-byte identical to what's committed — so it's a faithful source, not a redesign. (#17, closed)
 - [x] [claude] Week review screen: new "Review" tab, 4-week-at-a-time — one row per weekly entry with a heat strip (reusing Month view's accent/red convention) and a plain-stated count ("Met 3 of 4 weeks", "Over budget 2 of 4 weeks"), paginated. Design agreed with Kostas first: shape (heatmap + basic observations), window (last 4 weeks, rollback), placement (new tab), tone (direct but discreet — counts only, no advice, no causal claims). Verified with two mocked Playwright previews (data accuracy and pagination). (#14, closed)
 - [x] [claude] Per-user data export: a "Download my data" button in Manage view exports everything the account owns (entry types, logs with notes, reflections) as one JSON file, mirroring the existing importer's slug-based shape. Read-only, no schema change. Verified with a mocked Playwright preview, including inspecting the actual downloaded file contents. Merged via PR #23. (#13, closed)
 - [x] [claude] Undo for mis-taps: a tap on a counter chip (+1 or minus) or a binary toggle shows a neutral undo toast (a new `#undo` element, deliberately not the red-styled `#toast` used for errors) with an Undo button that reverts just that tap. Only the most recent tap is undoable. Previewed with a mocked screenshot before pushing (confirmed both counter and toggle revert correctly). Merged via PR #21. (#12, closed)
