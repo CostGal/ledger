@@ -1,5 +1,8 @@
 # Tasks
 
+<!-- demo: this is a throwaway line to show what a PR diff looks like on GitHub -->
+
+
 **Beta build:** both repos' `main` are in sync as of the last merge — entry detail page (yearly heatmap + weekday breakdown), Review tab, per-entry notes, undo for mis-taps, data export, plus the earlier password reset / icon / emoji-icon / unsaved-write-badge baseline. Both live once GitHub Pages redeploys (usually a minute or two after a merge).
 
 **GitHub issues:** every In progress / Queued item below is mirrored as an issue in this repo (`CostGal/ledger`), tagged `[kostas]` or `[claude]` in its title to match. Issue number is noted in parens after each item. When ticking an item here, close the matching issue in the same pass (and vice versa) — this list and the issue tracker are meant to stay in sync, not duplicate independently.
