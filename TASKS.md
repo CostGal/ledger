@@ -8,6 +8,14 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 
 ## In progress
 
+- [ ] [claude] Reminders per entry, delivered as real phone notifications (#31). Agreed with Kostas:
+  - Web Push (option 1), with custom frequency: every day, chosen weekdays, or every N days, and several reminders per entry are allowed
+  - skipped when the entry is already done for its period
+  - sandbox only at first
+  
+  App code, service worker, edge function and migration are written and previewed with mocks. **Switching on the server side is waiting for Kostas's go-ahead**: the migration, the function deploy, the Vault secrets and the cron job.
+- [ ] [kostas] Once reminders are live: add Ledger to the Home Screen from `costgal.github.io/ledger/`, turn on notifications in Entries → Reminders, press "Send a test", then set a real reminder and wait for it. (#31)
+
 - [ ] [kostas] Set Site URL + Redirect URLs in Supabase Auth → URL Configuration on **both** projects — reset links can't work without this. (#3)
 - [ ] [kostas] Test the full reset loop on a real iPhone: request → email arrives from `notify.socialhue.gr` → link opens set-password screen → new password works. (#4)
 

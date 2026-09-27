@@ -28,7 +28,7 @@ Both Supabase keys embedded in the file are publishable. The real access control
 
 Auth emails (signup confirmation, password reset) are sent by Supabase but routed through a custom SMTP provider — Resend, sending from `notify.socialhue.gr` — configured per-project in each Supabase project's Auth → SMTP settings. That configuration lives in the Supabase dashboard, not in this repo, so there's nothing in `index.html` to keep in sync with it; if sender domain or provider changes, update it in both the sandbox and beta Supabase projects.
 
-Both projects carry the identical schema: `entry_types`, `logs`, `reflections`.
+Both projects carry the identical schema: `entry_types`, `logs`, `reflections`. The one deliberate exception is **reminders**, which live in the sandbox project only while Kostas tries them out. They add the tables `reminders` and `push_subscriptions`, the `send-reminders` edge function, Vault secrets, and a 5-minute pg_cron job. In `index.html` they're gated by `REMINDERS` (true only for sandbox). The server-side source and how it fits together are in `supabase/README.md`. Reminders also added a root-level `sw.js` (a service worker for notifications only, with no fetch handler, so nothing is cached). Copy it to `ledger-beta` along with `index.html` when promoting.
 
 ## Design invariants — do not redesign
 
