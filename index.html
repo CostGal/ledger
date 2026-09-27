@@ -184,6 +184,15 @@
   .btnrow button.pri{background:var(--acc); border-color:var(--acc); color:#100E0D}
   .btnrow button.danger{color:var(--bad); border-color:#4A2325}
   .mut{font-size:13px; color:var(--ink2); line-height:1.5}
+  /* Reminders block inside an entry's edit form. A div, not a <label> —
+     a label wrapping buttons would forward every tap to the first one. */
+  .flabel{font-size:12.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink2)}
+  .rem{display:flex; flex-direction:column; gap:10px}
+  .remrow{display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:44px; border-bottom:1px solid var(--rule); font-size:15px}
+  .remrow .headbtn{min-height:44px}
+  .rem .daystrip{margin-bottom:0}
+  .rem [hidden]{display:none}
+  .rem input[type=time]{-webkit-appearance:none; appearance:none; min-height:44px}
   .msg{font-size:13.5px; color:var(--acc); min-height:18px; margin-top:8px}
   .msg.err{color:var(--bad)}
 
@@ -245,6 +254,12 @@ const SB_KEY=ENVS[ENV_NAME].key;
 /* Sessions are keyed per environment so signing into one doesn't clobber the other. */
 const SESS_KEY='ledger_session_'+ENV_NAME;
 const LAST_EMAIL_KEY='ledger_last_email_'+ENV_NAME;
+/* Reminders are sandbox-only while Kostas tries them out — the tables, the
+   send-reminders edge function and its 5-minute schedule exist only in the
+   sandbox project. The VAPID key below is the public half (public by
+   design); the private half lives in that project's Vault. */
+const REMINDERS = ENV_NAME==='sandbox';
+const VAPID_PUBLIC='BJ3z0F0bLRPRCpeVBmIlzotPA5XWH35cMrS0aNUNb8Bt7iJNTjo6KUnEH2MOEfIZaUrmL9A6hlGnCL-4lRW0p0s';
 
 /* ---------- utils ---------- */
 const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -357,7 +372,7 @@ async function api(path, opts, retry){
 }
 
 /* ---------- data ---------- */
-const S={ view:'day', date:todayD(), types:[], logs:{}, logNotes:{}, loaded:new Set(), refl:{}, editingId:null, noteEditId:null, showArchived:false, entryId:null, entryBack:'review', entryEnd:null, firstRun:false, renderToken:0, recovery:recoveryFromHash() };
+const S={ view:'day', date:todayD(), types:[], logs:{}, logNotes:{}, loaded:new Set(), refl:{}, editingId:null, noteEditId:null, showArchived:false, entryId:null, entryBack:'review', entryEnd:null, reminders:{}, push:null, firstRun:false, renderToken:0, recovery:recoveryFromHash() };
 if(S.recovery) history.replaceState(null,'',location.pathname+location.search);
 function monthKeyOf(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 async function loadTypes(){ S.types=await api('entry_types?select=*&order=sort.asc,created_at.asc'); }
@@ -481,6 +496,177 @@ function setRefl(wk, patch){
       {method:'PATCH', headers:{Prefer:'return=representation'}, body:body});
     if(!upd.length) await api('reflections',{method:'POST', headers:{Prefer:'return=minimal'},
       body:Object.assign({week_start:wk}, body)});
+  });
+}
+
+/* ---------- reminders ---------- */
+/* Reminder rows are fetched per entry, the first time its edit form opens.
+   Unlike logs these are plain awaited writes: they happen from the Manage
+   form, not a tap-to-log chip, so there's no dead-tap latency to avoid. */
+async function loadReminders(id){
+  S.reminders[id]=await api('reminders?select=*&entry_type_id=eq.'+id+'&order=at_time.asc');
+}
+async function addReminder(id, body){
+  const rows=await api('reminders',{method:'POST', headers:{Prefer:'return=representation'},
+    body:Object.assign({entry_type_id:id, start_date:key(todayD()),
+      tz:(Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC')}, body)});
+  S.reminders[id]=S.reminders[id].concat(rows).sort((a,b)=>a.at_time<b.at_time?-1:1);
+}
+async function deleteReminder(id, rid){
+  await api('reminders?id=eq.'+rid,{method:'DELETE'});
+  S.reminders[id]=S.reminders[id].filter(r=>r.id!==rid);
+}
+function describeReminder(r){
+  const at=' at '+String(r.at_time).slice(0,5);
+  if(r.freq==='weekdays') return (r.weekdays||[]).slice().sort().map(n=>DAYS[n-1].slice(0,3)).join(', ')+at;
+  if(r.freq==='every_n' && r.every_n>1) return 'Every '+r.every_n+' days'+at;
+  return 'Every day'+at;
+}
+/* Web Push plumbing. On iPhone this only exists inside the Home Screen app
+   (iOS 16.4+), never in a Safari tab — hence the specific message. */
+function pushUnsupported(){
+  if('serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window) return null;
+  const ios=/iPhone|iPad|iPod/.test(navigator.userAgent);
+  const standalone=navigator.standalone===true || matchMedia('(display-mode: standalone)').matches;
+  return ios && !standalone
+    ? 'On iPhone, reminders only work from the Home Screen app: in Safari tap Share → Add to Home Screen, then open Ledger from there.'
+    : 'This browser can’t show reminders.';
+}
+function b64u(s){
+  const b=atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4));
+  return Uint8Array.from(b, c=>c.charCodeAt(0));
+}
+async function currentSub(){
+  const reg=await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+async function saveSub(sub){
+  const j=sub.toJSON();
+  await api('push_subscriptions?on_conflict=endpoint',{method:'POST',
+    headers:{Prefer:'resolution=merge-duplicates,return=minimal'},
+    body:{endpoint:j.endpoint, p256dh:j.keys.p256dh, auth:j.keys.auth}});
+}
+async function pushStatus(){
+  const why=pushUnsupported(); if(why) return {state:'unsupported', why:why};
+  if(Notification.permission==='denied') return {state:'denied'};
+  const sub=await currentSub();
+  return {state: sub && Notification.permission==='granted' ? 'on' : 'off'};
+}
+async function enablePush(){
+  /* requestPermission has to be the first await — iOS only honours it
+     straight out of the tap. */
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted') throw new Error(perm==='denied'
+    ? 'Notifications are blocked — allow them in Settings → Notifications → Ledger.'
+    : 'Notifications weren’t allowed.');
+  const reg=await navigator.serviceWorker.ready;
+  const sub=(await reg.pushManager.getSubscription())
+    || await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64u(VAPID_PUBLIC)});
+  await saveSub(sub);
+}
+async function sendTestPush(retry){
+  const s=sess(); if(!s) throw new Error('signed out');
+  const r=await fetch(SB_URL+'/functions/v1/send-reminders',{method:'POST',
+    headers:{apikey:SB_KEY, Authorization:'Bearer '+s.access_token, 'Content-Type':'application/json'},
+    body:JSON.stringify({test:true})});
+  if(r.status===401 && retry!==false){ await refreshSession(); return sendTestPush(false); }
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error||('Error '+r.status));
+  return d.sent||0;
+}
+/* Registered on every sandbox load. If this device already said yes, the
+   subscription is re-saved quietly — covers a row the server dropped after
+   the phone rotated its push endpoint. */
+function startReminders(){
+  if(!REMINDERS || pushUnsupported()) return;
+  navigator.serviceWorker.register('sw.js').then(async()=>{
+    if(Notification.permission!=='granted') return;
+    const sub=await currentSub(); if(sub) await saveSub(sub);
+  }).catch(()=>{});
+}
+/* The Reminders part of an entry's edit form: its reminders, and a small
+   form to add another. Rebuilt in place with live() so adding/removing
+   doesn't redraw (and reset) the rest of the edit form. */
+function remindersBlock(id){
+  const days=[];
+  return live(function build(redraw){
+    const list=S.reminders[id];
+    if(list===undefined){
+      loadReminders(id).catch(e=>{ S.reminders[id]=[]; toast(e.message); }).then(redraw);
+      return el('div',{class:'rem'}, el('div',{class:'flabel'},'Reminders'), el('p',{class:'mut'},'Loading…'));
+    }
+    const msg=el('p',{class:'msg'});
+    const timeI=el('input',{type:'time', value:'21:00'});
+    const freqS=el('select',null,
+      el('option',{value:'daily'},'Every day'),
+      el('option',{value:'weekdays'},'Some days'),
+      el('option',{value:'every_n'},'Every N days'));
+    const strip=el('div',{class:'daystrip', hidden:true}, DL.map((l,i)=>{
+      const b=el('button',{type:'button', class:days.indexOf(i+1)>=0?'on':'', 'aria-label':DAYS[i],
+        onclick:()=>{ const k=days.indexOf(i+1); if(k>=0) days.splice(k,1); else days.push(i+1); b.classList.toggle('on', k<0); }}, l);
+      return b;
+    }));
+    const nI=el('input',{type:'number', inputmode:'numeric', min:'2', max:'365', value:'2'});
+    const nRow=el('label',{hidden:true},'Every how many days', nI);
+    freqS.onchange=()=>{ strip.hidden=freqS.value!=='weekdays'; nRow.hidden=freqS.value!=='every_n'; };
+    async function add(){
+      if(!timeI.value){ msg.textContent='Pick a time.'; msg.className='msg err'; return; }
+      if(freqS.value==='weekdays' && !days.length){ msg.textContent='Pick at least one day.'; msg.className='msg err'; return; }
+      const n=Math.min(365, Math.max(2, +nI.value||2));
+      msg.className='msg'; msg.textContent='Saving…';
+      try{
+        await addReminder(id, {at_time:timeI.value, freq:freqS.value,
+          weekdays:freqS.value==='weekdays'?days.slice():[], every_n:freqS.value==='every_n'?n:1});
+        days.length=0; redraw();
+      }catch(e){ msg.textContent=e.message; msg.className='msg err'; }
+    }
+    return el('div',{class:'rem'},
+      el('div',{class:'flabel'},'Reminders'),
+      list.length
+        ? el('div',null, list.map(r=>el('div',{class:'remrow'},
+            el('span',null, describeReminder(r)),
+            el('button',{class:'headbtn', onclick:async()=>{
+              try{ await deleteReminder(id, r.id); redraw(); }catch(e){ toast(e.message); } }},'Remove'))))
+        : el('p',{class:'mut'},'None yet. A reminder is skipped if the entry is already done for its period.'),
+      el('div',{class:'formrow'},
+        el('label',{class:'grow'},'Time', timeI),
+        el('label',{class:'grow'},'How often', freqS)),
+      strip, nRow,
+      el('div',{class:'btnrow'}, el('button',{onclick:add},'Add reminder')),
+      msg);
+  });
+}
+/* The "this device" half: reminders are stored per account, but each phone
+   has to say yes to notifications itself. */
+function pushBlock(){
+  return live(function build(redraw){
+    if(!S.push){
+      pushStatus().then(p=>{ S.push=p; redraw(); }, ()=>{ S.push={state:'unsupported', why:'This browser can’t show reminders.'}; redraw(); });
+      return el('p',{class:'mut'},'Checking this device…');
+    }
+    const msg=el('p',{class:'msg'});
+    const p=S.push;
+    const text = p.state==='on' ? 'Notifications are on for this device.'
+      : p.state==='off' ? 'Turn on notifications so the reminders you set on an entry reach this device.'
+      : p.state==='denied' ? 'Notifications are blocked for Ledger. Allow them in Settings → Notifications → Ledger, then come back.'
+      : p.why;
+    async function turnOn(){
+      msg.className='msg'; msg.textContent='Turning on…';
+      try{ await enablePush(); S.push=null; redraw(); }
+      catch(e){ S.push=null; redraw(); toast(e.message); }
+    }
+    async function test(){
+      msg.className='msg'; msg.textContent='Sending…';
+      try{ const n=await sendTestPush();
+        msg.textContent = n ? 'Sent — it should arrive in a few seconds.' : 'No device to send to — try turning notifications off and on.'; }
+      catch(e){ msg.textContent=e.message; msg.className='msg err'; }
+    }
+    return el('div',null,
+      el('p',{class:'mut'}, text),
+      p.state==='off' ? el('div',{class:'btnrow'}, el('button',{class:'pri', onclick:turnOn},'Turn on notifications')) : null,
+      p.state==='on' ? el('div',{class:'btnrow'}, el('button',{onclick:test},'Send a test')) : null,
+      msg,
+      el('p',{class:'mut'},'To set a reminder, open an entry above and add one under Reminders.'));
   });
 }
 
@@ -940,6 +1126,7 @@ function renderManageView(){
         el('button',{class:'pri', onclick:saveType},'Save'),
         el('button',{onclick:()=>{ S.editingId=null; render(); }},'Cancel'),
         S.editingId!=='new' ? el('button',{class:'danger', onclick:()=>archiveType(!ed.active)}, ed.active?'Archive':'Restore') : null),
+      REMINDERS && S.editingId!=='new' ? remindersBlock(ed.id) : null,
       S.editingId!=='new' ? el('button',{class:'headbtn', style:'align-self:flex-start; padding-left:0', onclick:()=>{ S.editingId=null; openEntry(ed.id); }},'See its year \u2192') : null,
       el('p',{class:'mut'},'Archiving hides an entry from logging but keeps all its history. Changing the type or target re-scores past periods too \u2014 history is stored as raw counts.'),
       msg));
@@ -956,6 +1143,10 @@ function renderManageView(){
         el('div',{class:'name'}, el('span',{class:'nametext'},x.name), x.icon?el('span',{class:'icon'},x.icon):null),
         el('div',{class:'tally'},
           (x.kind==='binary'?'yes/no':(x.kind==='floor'?'\u2265':'\u2264')+x.target)+' \u00B7 '+x.period))))));
+
+  if(REMINDERS) out.push(el('section',null,
+    el('div',{class:'head'}, el('h2',null,'Reminders'), el('span',{class:'sub'},'this device')),
+    pushBlock()));
 
   /* One JSON file with everything this account owns — entry types, every
      daily log (resolved to the entry's slug, not its opaque id, so the file
@@ -1168,4 +1359,5 @@ async function boot(){
   busy(false);
 }
 boot();
+startReminders();
 </script>
