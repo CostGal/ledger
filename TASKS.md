@@ -1,6 +1,6 @@
 # Tasks
 
-**Beta build:** `ledger-beta` is one merge behind — the entry detail page (PR #26) is on `ledger` only until promoted (#27). Before that, both repos' `main` were in sync — per-entry notes, undo for mis-taps, data export, plus the earlier password reset / icon / emoji-icon / unsaved-write-badge baseline. Both live once GitHub Pages redeploys (usually a minute or two after a merge).
+**Beta build:** both repos' `main` are in sync as of the last merge — entry detail page (yearly heatmap + weekday breakdown), Review tab, per-entry notes, undo for mis-taps, data export, plus the earlier password reset / icon / emoji-icon / unsaved-write-badge baseline. Both live once GitHub Pages redeploys (usually a minute or two after a merge).
 
 **GitHub issues:** every In progress / Queued item below is mirrored as an issue in this repo (`CostGal/ledger`), tagged `[kostas]` or `[claude]` in its title to match. Issue number is noted in parens after each item. When ticking an item here, close the matching issue in the same pass (and vice versa) — this list and the issue tracker are meant to stay in sync, not duplicate independently.
 
@@ -13,7 +13,6 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 
 ## Queued
 
-- [ ] [claude] Promote PR #26 (entry detail page, `tools/make-icons.mjs`) to `ledger-beta` — waiting on Kostas's go-ahead. (#27)
 - [ ] [kostas] Run the Resend→Supabase integration on `ledger-beta`; confirm SMTP settings are populated in that project's dashboard the same way as sandbox's. (#8)
 - [ ] [kostas] Save the weekly CSV export query in both Supabase projects. (#9)
 - [ ] [kostas] Supabase webhook on new signup → Make → notification. (#10)
@@ -21,6 +20,7 @@ Newest at top. Tags: `[kostas]` (needs Kostas), `[claude]` (Claude can do it).
 
 ## Done
 
+- [x] [claude] Promoted the entry detail page and `tools/make-icons.mjs` to `ledger-beta` (PR ledger-beta#5) — both repos' `main` are back in sync. (#27, closed)
 - [x] [claude] Entry detail page with a yearly heatmap and a day-of-week breakdown. Placement agreed with Kostas first: inside each entry rather than a sixth tab (the tab bar is already at five). Reached by tapping a row in Week or Review, or "See its year →" in an entry's edit form; Back returns to where it was opened. Shows the last 12 months as small month calendars (pageable a year at a time), a one-line total, and per-weekday totals. Ceilings show logged days muted and only turn red when that period actually went over budget. Read-only, no schema change. Verified with a mocked Playwright preview (floor + ceiling entries, every entry point, paging, Back). (#15, #16, closed)
 - [x] [claude] Recreated `tools/make-icons.mjs` from the spec in `CLAUDE.md`. Geometry (edges, corner radii, 4× supersampling, maskable `contentScale` 0.78) was measured off the existing PNGs, and the script now regenerates all four byte-for-byte identical to what's committed — so it's a faithful source, not a redesign. (#17, closed)
 - [x] [claude] Week review screen: new "Review" tab, 4-week-at-a-time — one row per weekly entry with a heat strip (reusing Month view's accent/red convention) and a plain-stated count ("Met 3 of 4 weeks", "Over budget 2 of 4 weeks"), paginated. Design agreed with Kostas first: shape (heatmap + basic observations), window (last 4 weeks, rollback), placement (new tab), tone (direct but discreet — counts only, no advice, no causal claims). Verified with two mocked Playwright previews (data accuracy and pagination). (#14, closed)
