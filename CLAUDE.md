@@ -13,7 +13,7 @@ Every tracked thing is an **entry type** with a `kind` and a `period`:
 - `kind`: `floor` (at least N — counter chips), `ceiling` (at most N — budget chips), `binary` (yes/no once per day — toggles)
 - `period`: `day`, `week`, `month`
 
-Logs are stored as raw daily counts, never as scored results, so changing a target or period re-scores history retroactively. The four views are **Day** (logging; can navigate to any past date), **Week**, **Month**, and **Entries** (CRUD over entry types). Week additionally carries a reflection: a 1–5 presence score plus a free-text note, keyed by week start.
+Logs are stored as raw daily counts, never as scored results, so changing a target or period re-scores history retroactively. The five tabs are **Day** (logging; can navigate to any past date), **Week**, **Month**, **Review** (last 4 weeks, one row per entry, pageable), and **Entries** (CRUD over entry types). A sixth, non-tab view — the **entry detail** page (`S.view==='entry'`) — shows one entry's last 12 months plus a weekday breakdown; it's opened from a Week/Review row or the edit form, keeps its own date anchor (`S.entryEnd`) so it never moves `S.date`, and its Back button returns to `S.entryBack`. Week additionally carries a reflection: a 1–5 presence score plus a free-text note, keyed by week start.
 
 ## Deployment & environments
 
@@ -54,7 +54,7 @@ Everything lives in `index.html`: inline `<style>`, then a single `<script>` imp
 - **Data access** — `loadTypes` / `ensureRange` / `setLog` / `getRefl` / `setRefl` are the only functions that touch the network for data (as opposed to auth). Writes are upserts done the long way: `PATCH` with `return=representation`, and `POST` only if the patch matched no rows.
   - `setLog`/`setRefl` update `S` **synchronously** and return a promise for the background write. Don't `await` them in a tap handler — that reintroduces the dead-tap latency. Do `await` them where ordering matters (`runImport`).
   - Both go through `pushWrite`, which keeps one write in flight per key and always sends the newest value. That serialisation is load-bearing: without it, two fast taps each `PATCH` (matching no row yet) and then `POST`, inserting the same `(entry_type_id, date)` twice. Reflections are keyed per **week**, not per field, for the same reason.
-- **Views** — `renderDayView`, `renderWeekView`, `renderMonthView`, `renderManageView`, `renderAuth`, dispatched by `draw()` based on `S.view`.
+- **Views** — `renderDayView`, `renderWeekView`, `renderMonthView`, `renderReviewView`, `renderEntryView`, `renderManageView`, `renderAuth`, dispatched by `draw()` based on `S.view`. A new view also needs a case in `viewSpan()` (which months it reads) so `dataReady()`/`render()` fetch for it.
 - **Rendering has two levels, and picking the right one matters:**
   - `live(build)` rebuilds **one subtree** in place. Use it for anything whose effect is local — a chip, a toggle, the score row. The rest of the DOM, the scroll position and focus survive. A tap that goes through `render()` instead will throw the user back to the top of the page.
   - `render()` redraws the whole screen. It draws **synchronously** when `dataReady()` says the needed months (and, for Week, the reflection) are already cached; otherwise it leaves the current screen up, shows the `#load` bar via `busy()`, and draws when the fetch lands. It never blanks the screen and never draws with missing data.
